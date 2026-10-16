@@ -1,52 +1,86 @@
 import {
   AbstractPowerSyncDatabase,
+  CrudEntry,
   PowerSyncBackendConnector,
   PowerSyncCredentials,
   UpdateType,
 } from '@powersync/react-native';
 import { supabase } from '../services/supabase/client';
-import { ENV } from '../config/env';
+import { ENV, isPowerSyncConfigured } from '../config/env';
 import { recordConflict } from './conflictResolution';
+import { LOCAL_DEMO_USER_ID } from '../utils/id';
 
 export type AuthExpiredListener = () => void;
 const authExpiredListeners = new Set<AuthExpiredListener>();
 
 export function onAuthExpired(listener: AuthExpiredListener): () => void {
   authExpiredListeners.add(listener);
-  return () => authExpiredListeners.delete(listener);
+  return () => {
+    authExpiredListeners.delete(listener);
+  };
 }
 
 function notifyAuthExpired() {
-  authExpiredListeners.forEach((listener) => {
+  authExpiredListeners.forEach((l) => {
     try {
-      listener();
+      l();
     } catch (e) {
-      console.error('[Connector] Error in auth expired listener', e);
+      console.error('[Connector] auth-expired listener error', e);
     }
   });
 }
 
 /**
- * Backend connector linking local SQLite with remote Supabase / PowerSync Service
+ * Postgres error classes that will NEVER succeed on retry:
+ *  22xxx data exception (e.g. invalid UUID), 23xxx integrity violation (FK, unique, check),
+ *  42501 insufficient privilege (RLS rejection).
+ * If these were re-thrown the upload queue would be blocked forever.
+ */
+const FATAL_PG_CODE = [/^22...$/, /^23...$/, /^42501$/];
+
+function isFatal(code?: string): boolean {
+  return !!code && FATAL_PG_CODE.some((re) => re.test(code));
+}
+
+function isAuthError(status: number | undefined, error: any): boolean {
+  return (
+    status === 401 ||
+    error?.code === 'PGRST301' ||
+    error?.code === 'PGRST303' ||
+    /jwt/i.test(error?.message ?? '')
+  );
+}
+
+/** Converts SQLite representations back to Postgres-friendly values. */
+function toRemote(
+  table: string,
+  data: Record<string, any>,
+  authenticatedUserId?: string
+): Record<string, any> {
+  const out = { ...data };
+  if (table === 'wallets' && out.is_active !== undefined && out.is_active !== null) {
+    out.is_active = Boolean(out.is_active);
+  }
+  if (authenticatedUserId && out.user_id === LOCAL_DEMO_USER_ID) {
+    out.user_id = authenticatedUserId;
+  }
+  return out;
+}
+
+/**
+ * Backend connector linking the local SQLite database with Supabase / PowerSync Service.
  */
 export class SupabaseConnector implements PowerSyncBackendConnector {
-  /**
-   * Retrieves fresh credentials from the Supabase session
-   */
   async fetchCredentials(): Promise<PowerSyncCredentials | null> {
-    const {
-      data: { session },
-      error,
-    } = await supabase.auth.getSession();
-
-    if (error || !session) {
+    if (!isPowerSyncConfigured()) {
+      console.warn('[PowerSync] EXPO_PUBLIC_POWERSYNC_URL no configurada: modo solo-local.');
       return null;
     }
 
-    if (!ENV.POWERSYNC_URL) {
-      console.warn('[PowerSync] EXPO_PUBLIC_POWERSYNC_URL no está configurada en .env');
-      return null;
-    }
+    const { data, error } = await supabase.auth.getSession();
+    if (error) throw error; // temporary error -> PowerSync retries
+    const session = data.session;
+    if (!session) return null; // not signed in
 
     return {
       endpoint: ENV.POWERSYNC_URL,
@@ -56,88 +90,88 @@ export class SupabaseConnector implements PowerSyncBackendConnector {
   }
 
   /**
-   * Uploads local SQLite mutations sequentially to Supabase
-   * Handles offline enqueuing, 401 token expirations and conflict interception.
+   * Uploads queued local mutations, one transaction at a time, in order.
+   * - Network / auth errors are thrown -> PowerSync keeps the data and retries later.
+   * - Fatal data errors and version conflicts are recorded in `sync_conflicts`
+   *   and skipped so they never block the rest of the queue.
    */
   async uploadData(database: AbstractPowerSyncDatabase): Promise<void> {
     const transaction = await database.getNextCrudTransaction();
-    if (!transaction) {
-      return;
+    if (!transaction) return;
+
+    const { data: sessionData } = await supabase.auth.getSession();
+    const authUserId = sessionData.session?.user?.id;
+
+    for (const op of transaction.crud) {
+      await this.uploadOperation(database, op, authUserId);
     }
 
-    try {
-      for (const op of transaction.crud) {
-        // Skip local-only tables
-        if (op.table === 'sync_conflicts') {
-          continue;
-        }
-
-        const table = op.table;
-        const data = op.opData || {};
-
-        switch (op.op) {
-          case UpdateType.PUT: {
-            const payload = { id: op.id, ...data };
-            const { error } = await supabase.from(table).upsert(payload);
-            if (error) {
-              await this.handleMutationError(database, table, op.id, data, error);
-            }
-            break;
-          }
-
-          case UpdateType.PATCH: {
-            const { error } = await supabase.from(table).update(data).eq('id', op.id);
-            if (error) {
-              await this.handleMutationError(database, table, op.id, data, error);
-            }
-            break;
-          }
-
-          case UpdateType.DELETE: {
-            const { error } = await supabase.from(table).delete().eq('id', op.id);
-            if (error) {
-              await this.handleMutationError(database, table, op.id, { deleted: true }, error);
-            }
-            break;
-          }
-        }
-      }
-
-      // Mark the entire transaction as uploaded
-      await transaction.complete();
-    } catch (err: any) {
-      console.error('[PowerSync Connector] Error uploading batch:', err);
-      throw err;
-    }
+    await transaction.complete();
   }
 
-  /**
-   * Error interceptor for offline recovery & conflict handling
-   */
-  private async handleMutationError(
-    database: any,
-    table: string,
-    id: string,
-    localData: any,
-    error: any
-  ) {
-    const statusCode = error.status || (error.code ? parseInt(error.code, 10) : null);
+  private async uploadOperation(
+    database: AbstractPowerSyncDatabase,
+    op: CrudEntry,
+    authUserId?: string
+  ): Promise<void> {
+    const table = op.table;
+    const data = toRemote(table, op.opData ?? {}, authUserId);
 
-    // Escenario 3: Token expired while offline (HTTP 401)
-    if (statusCode === 401 || error.message?.includes('JWT') || error.message?.includes('expired')) {
-      console.warn('[PowerSync Connector] 401 Unauthorized detectado. Pausando cola de sincronización.');
+    let result: { error: any; status: number };
+
+    switch (op.op) {
+      case UpdateType.PUT:
+        result = await supabase.from(table).upsert({ ...data, id: op.id });
+        break;
+
+      case UpdateType.PATCH: {
+        const prevVersion = op.previousValues?.version;
+        let query = supabase.from(table).update(data).eq('id', op.id);
+
+        // Optimistic concurrency: only apply if the server still has the version we edited.
+        const useVersionCheck = table === 'transactions' && prevVersion !== undefined && prevVersion !== null;
+        if (useVersionCheck) {
+          query = query.eq('version', prevVersion);
+        }
+
+        const res = await query.select('id');
+        result = res;
+
+        if (!res.error && useVersionCheck && (res.data?.length ?? 0) === 0) {
+          const { data: remote } = await supabase.from(table).select('*').eq('id', op.id).maybeSingle();
+          await recordConflict(database, table, op.id, data, remote ?? { deleted_remotely: true });
+          return; // skip; server row will be re-downloaded by PowerSync
+        }
+        break;
+      }
+
+      case UpdateType.DELETE:
+        result = await supabase.from(table).delete().eq('id', op.id);
+        break;
+
+      default:
+        return;
+    }
+
+    if (!result.error) return;
+
+    const { error, status } = result;
+
+    if (isAuthError(status, error)) {
       notifyAuthExpired();
-      throw new Error('AUTH_EXPIRED: Requiere reautenticación para continuar la sincronización en la nube');
+      throw new Error('AUTH_EXPIRED: se requiere reautenticación para sincronizar');
     }
 
-    // Escenario 2: Concurrent conflict / collision (HTTP 409 or constraint mismatch)
-    if (statusCode === 409 || error.code === '23505' || error.message?.includes('conflict')) {
-      console.warn(`[PowerSync Connector] Conflicto de concurrencia detectado en tabla ${table}:${id}`);
-      await recordConflict(database, table, id, localData, { error: error.message });
-      // Keep going or re-throw depending on strategy
-      return;
+    if (status === 409 || isFatal(error?.code)) {
+      await recordConflict(database, table, op.id, data, {
+        rejected_by_server: true,
+        code: error?.code,
+        message: error?.message,
+      });
+      return; // skip this op, continue with the rest of the queue
     }
 
+    // Unknown / network / 5xx: keep in queue and retry later
     throw error;
   }
 }

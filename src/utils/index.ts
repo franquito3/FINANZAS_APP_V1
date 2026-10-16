@@ -1,6 +1,7 @@
 /**
- * Utility functions for formatting and calculations
+ * Utility functions for formatting, UUID generation and calculations
  */
+export * from './id';
 
 export function formatCurrency(amount: number, currency: string = 'USD'): string {
   try {

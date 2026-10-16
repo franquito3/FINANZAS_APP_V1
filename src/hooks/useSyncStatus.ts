@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { db } from '../db/powersync';
 import { onAuthExpired } from '../db/connector';
 import { getUnresolvedConflicts } from '../db/conflictResolution';
+import { useTableChanges } from './useTableChanges';
 
 export interface DetailedSyncStatus {
   connected: boolean;
@@ -10,66 +11,70 @@ export interface DetailedSyncStatus {
   uploading: boolean;
   lastSyncedAt: Date | null;
   hasUnresolvedConflicts: boolean;
+  conflictCount: number;
   authExpired: boolean;
   pendingUploadCount: number;
 }
 
 export function useSyncStatus() {
-  const [status, setStatus] = useState<DetailedSyncStatus>({
-    connected: false,
-    connecting: false,
-    downloading: false,
-    uploading: false,
-    lastSyncedAt: null,
-    hasUnresolvedConflicts: false,
-    authExpired: false,
-    pendingUploadCount: 0,
+  const [status, setStatus] = useState<DetailedSyncStatus>(() => {
+    const s = db.currentStatus;
+    return {
+      connected: Boolean(s?.connected),
+      connecting: Boolean(s?.connecting),
+      downloading: Boolean(s?.dataFlowStatus?.downloading),
+      uploading: Boolean(s?.dataFlowStatus?.uploading),
+      lastSyncedAt: s?.lastSyncedAt ?? null,
+      hasUnresolvedConflicts: false,
+      conflictCount: 0,
+      authExpired: false,
+      pendingUploadCount: 0,
+    };
   });
 
+  const refreshCounters = useCallback(async () => {
+    try {
+      const [conflicts, stats] = await Promise.all([
+        getUnresolvedConflicts(db),
+        db.getUploadQueueStats(),
+      ]);
+      setStatus((prev) => ({
+        ...prev,
+        conflictCount: conflicts.length,
+        hasUnresolvedConflicts: conflicts.length > 0,
+        pendingUploadCount: stats.count ?? 0,
+      }));
+    } catch {
+      // Database may not be ready yet
+    }
+  }, []);
+
+  // Re-count when local data or conflicts change (each write adds to the queue)
+  useTableChanges(['transactions', 'wallets', 'categories', 'budgets', 'sync_conflicts'], refreshCounters, 300);
+
   useEffect(() => {
-    // Listen for auth expiration events from connector
-    const unsubscribeAuthExpired = onAuthExpired(() => {
-      setStatus((prev) => ({ ...prev, authExpired: true }));
-    });
+    const offAuth = onAuthExpired(() => setStatus((prev) => ({ ...prev, authExpired: true })));
 
-    // Register listener on PowerSync status updates
-    const unsubscribeStatus = db.registerListener({
-      statusChanged: async (currentStatus) => {
-        let conflictCount = 0;
-        let queueCount = 0;
-
-        try {
-          const conflicts = await getUnresolvedConflicts(db);
-          conflictCount = conflicts.length;
-        } catch {
-          // In case table is not ready yet
-        }
-
-        try {
-          const stats = await db.getUploadQueueStats();
-          queueCount = stats.count ?? 0;
-        } catch {
-          // stats error fallback
-        }
-
+    const offStatus = db.registerListener({
+      statusChanged: (s) => {
         setStatus((prev) => ({
           ...prev,
-          connected: Boolean(currentStatus.connected),
-          connecting: Boolean(currentStatus.connecting),
-          downloading: Boolean(currentStatus.downloading),
-          uploading: Boolean(currentStatus.uploading),
-          lastSyncedAt: currentStatus.lastSyncedAt ?? prev.lastSyncedAt,
-          hasUnresolvedConflicts: conflictCount > 0,
-          pendingUploadCount: queueCount,
+          connected: Boolean(s.connected),
+          connecting: Boolean(s.connecting),
+          downloading: Boolean(s.dataFlowStatus?.downloading),
+          uploading: Boolean(s.dataFlowStatus?.uploading),
+          lastSyncedAt: s.lastSyncedAt ?? prev.lastSyncedAt,
+          authExpired: s.connected ? false : prev.authExpired,
         }));
+        refreshCounters();
       },
     });
 
     return () => {
-      unsubscribeAuthExpired();
-      unsubscribeStatus?.();
+      offAuth();
+      offStatus?.();
     };
-  }, []);
+  }, [refreshCounters]);
 
   return status;
 }

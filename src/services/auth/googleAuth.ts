@@ -102,7 +102,8 @@ export async function signInWithGoogleOAuth(): Promise<{ error: Error | null }> 
  */
 export async function signOutUser(): Promise<{ error: Error | null }> {
   try {
-    const { error } = await supabase.auth.signOut();
+    // scope 'local' clears the session on this device even when offline
+    const { error } = await supabase.auth.signOut({ scope: 'local' });
     return { error };
   } catch (err: any) {
     return { error: err instanceof Error ? err : new Error(String(err)) };

@@ -14,6 +14,7 @@ import { Category, TransactionType, Wallet } from '../types';
 import { THEME } from '../constants';
 import { financeService } from '../services/data/financeService';
 import { useAuth } from '../context/AuthContext';
+import { LOCAL_DEMO_USER_ID } from '../utils/id';
 
 interface Props {
   visible: boolean;
@@ -103,8 +104,12 @@ export const TransactionModal: React.FC<Props> = ({
       return;
     }
 
-    const walletId = selectedWalletId || wallets[0]?.id || 'wallet_cash';
-    const userId = user?.id || 'local_user';
+    const walletId = selectedWalletId || wallets[0]?.id;
+    if (!walletId) {
+      Alert.alert('Billetera requerida', 'No se encontró una billetera activa.');
+      return;
+    }
+    const userId = user?.id || LOCAL_DEMO_USER_ID;
 
     setIsSaving(true);
     try {

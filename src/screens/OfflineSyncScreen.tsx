@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -7,84 +7,88 @@ import {
   ScrollView,
   Alert,
 } from 'react-native';
-import { db } from '../db/powersync';
+import { db, initLocalDatabase } from '../db/powersync';
+import {
+  getUnresolvedConflicts,
+  resolveConflict,
+  SyncConflict,
+} from '../db/conflictResolution';
 import { useSyncStatus } from '../hooks/useSyncStatus';
+import { useTableChanges } from '../hooks/useTableChanges';
 import { useAuth } from '../context/AuthContext';
 import { THEME, APP_CONFIG } from '../constants';
-import { formatCurrency } from '../utils';
-
-interface TransactionRow {
-  id: string;
-  notes: string;
-  amount: number;
-  transaction_date: string;
-}
+import { formatCurrency, LOCAL_DEMO_USER_ID } from '../utils';
+import { financeService } from '../services/data/financeService';
+import { seedLocalDefaults } from '../services/data/seedData';
+import { Transaction } from '../types';
 
 export const OfflineSyncScreen: React.FC = () => {
   const syncStatus = useSyncStatus();
   const { user } = useAuth();
-  const [transactions, setTransactions] = useState<TransactionRow[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [conflicts, setConflicts] = useState<SyncConflict[]>([]);
   const [isInserting, setIsInserting] = useState(false);
 
-  // Load transactions directly from local SQLite with 0ms latency
-  const loadLocalTransactions = async () => {
+  const loadLocalData = useCallback(async () => {
     try {
-      const rows = await db.getAll<TransactionRow>(
-        'SELECT id, notes, amount, transaction_date FROM transactions ORDER BY transaction_date DESC LIMIT 5'
-      );
+      await initLocalDatabase();
+      const [rows, pendingConflicts] = await Promise.all([
+        financeService.getTransactions(5, 'all'),
+        getUnresolvedConflicts(db),
+      ]);
       setTransactions(rows);
+      setConflicts(pendingConflicts);
     } catch (err) {
       console.error('[OfflineSyncScreen] Error querying local SQLite:', err);
     }
-  };
-
-  useEffect(() => {
-    loadLocalTransactions();
-
-    // Watch query changes in local SQLite reactively
-    const unsubscribe = db.registerListener({
-      schemaChanged: () => {
-        loadLocalTransactions();
-      },
-    });
-
-    return () => {
-      unsubscribe?.();
-    };
   }, []);
 
-  // Simulates registering an expense in total network isolation (e.g., in a subway tunnel or airplane)
+  useTableChanges(['transactions', 'sync_conflicts'], loadLocalData);
+
+  // Registers an expense in network isolation using valid UUIDs so it syncs cleanly when online
   const handleCreateOfflineExpense = async () => {
     setIsInserting(true);
     try {
-      const id = `tx_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const userId = user?.id || LOCAL_DEMO_USER_ID;
+      await initLocalDatabase();
+      await seedLocalDefaults(userId);
+
+      const [wallets, categories] = await Promise.all([
+        financeService.getWallets(),
+        financeService.getCategories('EGRESO'),
+      ]);
+
+      const walletId = wallets[0]?.id;
+      const categoryId = categories[0]?.id;
+
+      if (!walletId || !categoryId) {
+        throw new Error('No se encontraron billeteras o categorías base en SQLite.');
+      }
+
       const amount = parseFloat((Math.random() * 50 + 5).toFixed(2));
-      const now = new Date().toISOString();
-      const userId = user?.id || 'offline_anonymous_user';
-
-      // Insert directly into local SQLite database
-      await db.execute(
-        `INSERT INTO transactions (id, user_id, wallet_id, category_id, amount, transaction_date, notes, version, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          id,
-          userId,
-          'wallet_default',
-          'cat_food',
-          amount,
-          now,
-          `Café / Almuerzo (${new Date().toLocaleTimeString()})`,
-          1,
-          now,
-          now,
-        ]
-      );
-
-      await loadLocalTransactions();
+      await financeService.createTransaction({
+        amount,
+        walletId,
+        categoryId,
+        userId,
+        notes: `Café / Almuerzo (${new Date().toLocaleTimeString()})`,
+      });
     } catch (err: any) {
       Alert.alert('Error Local SQLite', err.message);
     } finally {
       setIsInserting(false);
+    }
+  };
+
+  const handleResolveConflict = async (
+    conflictId: string,
+    choice: 'KEEP_LOCAL' | 'KEEP_REMOTE'
+  ) => {
+    try {
+      await resolveConflict(db, conflictId, choice);
+      await loadLocalData();
+    } catch (err: any) {
+      Alert.alert('Error al resolver conflicto', err.message);
     }
   };
 
@@ -144,7 +148,9 @@ export const OfflineSyncScreen: React.FC = () => {
               },
             ]}
           >
-            {syncStatus.hasUnresolvedConflicts ? '⚠️ Hay conflictos por revisar' : '✓ Sin conflictos'}
+            {syncStatus.hasUnresolvedConflicts
+              ? `⚠️ ${syncStatus.conflictCount} conflicto(s) por revisar`
+              : '✓ Sin conflictos'}
           </Text>
         </View>
 
@@ -168,11 +174,45 @@ export const OfflineSyncScreen: React.FC = () => {
         </Text>
       </TouchableOpacity>
 
+      {/* Unresolved Conflicts Audit Panel */}
+      {conflicts.length > 0 && (
+        <View style={styles.conflictCard}>
+          <Text style={styles.cardSectionTitle}>Auditoría de Conflictos ({conflicts.length})</Text>
+          {conflicts.map((c) => (
+            <View key={c.id} style={styles.conflictItem}>
+              <Text style={styles.conflictTitle}>
+                Tabla: {c.entity_table} • ID: {c.record_id.slice(0, 8)}...
+              </Text>
+              <Text style={styles.conflictDetail}>
+                Local: {JSON.stringify(c.local_data)}
+              </Text>
+              <Text style={styles.conflictDetail}>
+                Servidor: {JSON.stringify(c.remote_data)}
+              </Text>
+              <View style={styles.conflictActions}>
+                <TouchableOpacity
+                  style={[styles.conflictBtn, styles.keepLocalBtn]}
+                  onPress={() => handleResolveConflict(c.id, 'KEEP_LOCAL')}
+                >
+                  <Text style={styles.conflictBtnText}>Conservar Local</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.conflictBtn, styles.keepRemoteBtn]}
+                  onPress={() => handleResolveConflict(c.id, 'KEEP_REMOTE')}
+                >
+                  <Text style={styles.conflictBtnText}>Usar Versión Nube</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+
       {/* Local SQLite Transactions Feed */}
       <View style={styles.feedCard}>
         <View style={styles.feedHeader}>
           <Text style={styles.cardSectionTitle}>Últimas Transacciones en SQLite Local</Text>
-          <TouchableOpacity onPress={loadLocalTransactions}>
+          <TouchableOpacity onPress={loadLocalData}>
             <Text style={styles.refreshLink}>Actualizar</Text>
           </TouchableOpacity>
         </View>
@@ -185,9 +225,9 @@ export const OfflineSyncScreen: React.FC = () => {
           transactions.map((tx) => (
             <View key={tx.id} style={styles.txRow}>
               <View style={styles.txInfo}>
-                <Text style={styles.txNotes}>{tx.notes}</Text>
+                <Text style={styles.txNotes}>{tx.notes || tx.category_name}</Text>
                 <Text style={styles.txDate}>
-                  {new Date(tx.transaction_date).toLocaleTimeString()}
+                  {new Date(tx.transaction_date).toLocaleTimeString()} • UUID: {tx.id.slice(0, 8)}
                 </Text>
               </View>
               <Text style={styles.txAmount}>-{formatCurrency(tx.amount)}</Text>
@@ -306,6 +346,55 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
   },
+  conflictCard: {
+    backgroundColor: '#FEF2F2',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    marginBottom: 16,
+    gap: 10,
+  },
+  conflictItem: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    gap: 6,
+  },
+  conflictTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: THEME.colors.danger,
+  },
+  conflictDetail: {
+    fontSize: 11,
+    color: THEME.colors.textSecondary,
+    fontFamily: 'monospace',
+  },
+  conflictActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 6,
+  },
+  conflictBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  keepLocalBtn: {
+    backgroundColor: THEME.colors.primary,
+  },
+  keepRemoteBtn: {
+    backgroundColor: '#64748B',
+  },
+  conflictBtnText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
   feedCard: {
     backgroundColor: THEME.colors.card,
     borderRadius: 16,
@@ -342,6 +431,8 @@ const styles = StyleSheet.create({
   },
   txInfo: {
     gap: 2,
+    flex: 1,
+    paddingRight: 8,
   },
   txNotes: {
     fontSize: 14,
@@ -349,7 +440,7 @@ const styles = StyleSheet.create({
     color: THEME.colors.textPrimary,
   },
   txDate: {
-    fontSize: 12,
+    fontSize: 11,
     color: THEME.colors.textSecondary,
   },
   txAmount: {

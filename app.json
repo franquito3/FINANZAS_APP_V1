@@ -27,7 +27,8 @@
     "plugins": [
       "expo-secure-store",
       "expo-web-browser",
-      "expo-sharing"
+      "expo-sharing",
+      "expo-router"
     ]
   }
 }

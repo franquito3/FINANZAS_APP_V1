@@ -9,17 +9,18 @@ import {
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { THEME, APP_CONFIG } from '../constants';
-import { ENV } from '../config/env';
+import { isSupabaseConfigured } from '../config/env';
+import { db } from '../db/powersync';
 
 export const AuthScreen: React.FC = () => {
   const { session, user, isLoading, signInWithGoogle, signOut } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleGoogleLogin = async () => {
-    if (!ENV.SUPABASE_URL || ENV.SUPABASE_URL.includes('your-supabase-project')) {
+    if (!isSupabaseConfigured()) {
       Alert.alert(
         'Configuración Requerida',
-        'Por favor, configure las variables EXPO_PUBLIC_SUPABASE_URL y EXPO_PUBLIC_SUPABASE_ANON_KEY en su archivo .env para autenticar con Supabase.'
+        'Configure EXPO_PUBLIC_SUPABASE_URL y EXPO_PUBLIC_SUPABASE_ANON_KEY en el archivo .env y reinicie el servidor de desarrollo.'
       );
       return;
     }
@@ -33,14 +34,36 @@ export const AuthScreen: React.FC = () => {
     }
   };
 
-  const handleSignOut = async () => {
+  const doSignOut = async () => {
     setIsSubmitting(true);
     const { error } = await signOut();
     setIsSubmitting(false);
-
     if (error) {
       Alert.alert('Error al cerrar sesión', error.message);
     }
+  };
+
+  const handleSignOut = async () => {
+    // Signing out wipes the local database; warn if there are unsynced changes
+    let pending = 0;
+    try {
+      pending = (await db.getUploadQueueStats()).count ?? 0;
+    } catch {
+      // ignore
+    }
+
+    if (pending > 0) {
+      Alert.alert(
+        'Cambios sin sincronizar',
+        `Tienes ${pending} cambio(s) que aún no se han subido a la nube. Si cierras sesión ahora se perderán. Conéctate a internet y espera a que se sincronicen.`,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Cerrar sesión igualmente', style: 'destructive', onPress: doSignOut },
+        ]
+      );
+      return;
+    }
+    await doSignOut();
   };
 
   if (isLoading) {

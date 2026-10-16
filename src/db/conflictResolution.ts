@@ -1,4 +1,5 @@
-import { PowerSyncDatabase } from '@powersync/react-native';
+import { AbstractPowerSyncDatabase } from '@powersync/react-native';
+import { newId } from '../utils/id';
 
 export interface SyncConflict {
   id: string;
@@ -11,50 +12,30 @@ export interface SyncConflict {
 }
 
 /**
- * Registers an audited conflict in the local sync_conflicts table
- * to prevent blind data destruction when concurrent edits occur.
+ * Stores a rejected/conflicting local change in the local-only `sync_conflicts` table,
+ * so it is never silently lost (no blind Last-Write-Wins).
  */
 export async function recordConflict(
-  database: PowerSyncDatabase,
+  database: AbstractPowerSyncDatabase,
   table: string,
   recordId: string,
   localData: Record<string, any>,
   remoteData: Record<string, any>
 ): Promise<void> {
-  const conflictId = `conflict_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-  const now = new Date().toISOString();
-
   await database.execute(
     `INSERT INTO sync_conflicts (id, entity_table, record_id, local_data, remote_data, detected_at, resolved)
      VALUES (?, ?, ?, ?, ?, ?, 0)`,
-    [
-      conflictId,
-      table,
-      recordId,
-      JSON.stringify(localData),
-      JSON.stringify(remoteData),
-      now,
-    ]
+    [newId(), table, recordId, JSON.stringify(localData), JSON.stringify(remoteData), new Date().toISOString()]
   );
-  console.warn(`[Sync Conflict] Conflict recorded for table '${table}' and record '${recordId}'`);
+  console.warn(`[Sync Conflict] Registrado conflicto en '${table}' para el registro '${recordId}'`);
 }
 
-/**
- * Fetches all pending unresolved conflicts
- */
 export async function getUnresolvedConflicts(
-  database: PowerSyncDatabase
+  database: AbstractPowerSyncDatabase
 ): Promise<SyncConflict[]> {
-  const rows = await database.getAll<{
-    id: string;
-    entity_table: string;
-    record_id: string;
-    local_data: string;
-    remote_data: string;
-    detected_at: string;
-    resolved: number;
-  }>('SELECT * FROM sync_conflicts WHERE resolved = 0 ORDER BY detected_at DESC');
-
+  const rows = await database.getAll<any>(
+    'SELECT * FROM sync_conflicts WHERE resolved = 0 ORDER BY detected_at DESC'
+  );
   return rows.map((row) => ({
     id: row.id,
     entity_table: row.entity_table,
@@ -66,47 +47,43 @@ export async function getUnresolvedConflicts(
   }));
 }
 
+const EDITABLE_COLUMNS: Record<string, string[]> = {
+  transactions: ['amount', 'category_id', 'wallet_id', 'notes', 'transaction_date'],
+  wallets: ['name', 'currency_code', 'is_active'],
+  categories: ['name', 'icon_identifier', 'color_hex', 'type'],
+  budgets: ['limit_amount', 'period', 'start_date', 'end_date'],
+};
+
 /**
- * Resolves an existing conflict by applying either local or remote data
+ * Resolves a conflict.
+ *
+ * - KEEP_REMOTE: the rejected local change was already dropped from the upload queue and
+ *   PowerSync re-downloads the authoritative server row, so we only mark it resolved.
+ * - KEEP_LOCAL: re-applies the local values as a NEW local edit on top of the current
+ *   (server) version. It gets queued again and uploaded with the fresh version.
  */
 export async function resolveConflict(
-  database: PowerSyncDatabase,
+  database: AbstractPowerSyncDatabase,
   conflictId: string,
-  resolution: 'KEEP_LOCAL' | 'KEEP_REMOTE',
-  tableUploadFn?: (table: string, data: Record<string, any>) => Promise<void>
+  resolution: 'KEEP_LOCAL' | 'KEEP_REMOTE'
 ): Promise<void> {
-  const rows = await database.getAll<{
-    id: string;
-    entity_table: string;
-    record_id: string;
-    local_data: string;
-    remote_data: string;
-  }>('SELECT * FROM sync_conflicts WHERE id = ?', [conflictId]);
+  const conflict = await database.getOptional<any>('SELECT * FROM sync_conflicts WHERE id = ?', [conflictId]);
+  if (!conflict) throw new Error(`Conflicto ${conflictId} no encontrado`);
 
-  if (rows.length === 0) {
-    throw new Error(`Conflict with id ${conflictId} not found`);
-  }
+  if (resolution === 'KEEP_LOCAL') {
+    const local = JSON.parse(conflict.local_data || '{}');
+    const allowed = EDITABLE_COLUMNS[conflict.entity_table] ?? [];
+    const cols = allowed.filter((c) => local[c] !== undefined);
 
-  const conflict = rows[0];
-  const local = JSON.parse(conflict.local_data || '{}');
-  const remote = JSON.parse(conflict.remote_data || '{}');
-
-  if (resolution === 'KEEP_REMOTE') {
-    // Overwrite local SQLite row with remote version
-    const columns = Object.keys(remote);
-    if (columns.length > 0) {
-      const setClauses = columns.map((col) => `${col} = ?`).join(', ');
-      const values = columns.map((col) => remote[col]);
+    if (cols.length > 0) {
+      const hasVersion = conflict.entity_table === 'transactions';
+      const setSql = cols.map((c) => `${c} = ?`).join(', ') + (hasVersion ? ', version = version + 1' : '');
       await database.execute(
-        `UPDATE ${conflict.entity_table} SET ${setClauses} WHERE id = ?`,
-        [...values, conflict.record_id]
+        `UPDATE ${conflict.entity_table} SET ${setSql}, updated_at = ? WHERE id = ?`,
+        [...cols.map((c) => local[c]), new Date().toISOString(), conflict.record_id]
       );
     }
-  } else if (resolution === 'KEEP_LOCAL' && tableUploadFn) {
-    // Push local version to backend
-    await tableUploadFn(conflict.entity_table, local);
   }
 
-  // Mark conflict as resolved
   await database.execute('UPDATE sync_conflicts SET resolved = 1 WHERE id = ?', [conflictId]);
 }

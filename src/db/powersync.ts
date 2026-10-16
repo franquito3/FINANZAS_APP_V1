@@ -9,40 +9,41 @@ export const db = new PowerSyncDatabase({
   },
 });
 
-let isInitialized = false;
+let initPromise: Promise<void> | null = null;
+
+/** Opens the local SQLite database (idempotent). Works fully offline. */
+export function initLocalDatabase(): Promise<void> {
+  if (!initPromise) {
+    initPromise = db.init().then(() => {
+      console.log('[PowerSync] Base de datos SQLite local inicializada');
+    });
+  }
+  return initPromise;
+}
 
 /**
- * Initializes the local SQLite storage engine and starts PowerSync background sync
+ * Starts background sync for the signed-in user.
+ * db.connect() returns immediately and keeps retrying in the background while offline;
+ * local reads/writes are never blocked by the network.
  */
-export async function initPowerSync(): Promise<void> {
-  if (isInitialized) {
-    return;
-  }
-
+export async function connectPowerSync(): Promise<void> {
+  await initLocalDatabase();
   try {
-    await db.init();
-    isInitialized = true;
-    console.log('[PowerSync] Local SQLite database initialized successfully');
-
-    // Attempt connecting to the cloud backend
     await db.connect(connector);
-    console.log('[PowerSync] Connected to PowerSync cloud service');
   } catch (error) {
-    console.warn(
-      '[PowerSync] Sync connection could not be established immediately (running in offline local-only mode):',
-      error
-    );
+    console.warn('[PowerSync] No se pudo iniciar la sincronización (se reintentará):', error);
   }
 }
 
 /**
- * Disconnects sync (e.g., on sign out or when entering offline mode)
+ * On sign-out: stop syncing and wipe local data so the next user on this
+ * device never sees the previous user's finances.
  */
-export async function disconnectPowerSync(): Promise<void> {
+export async function disconnectAndClearPowerSync(): Promise<void> {
   try {
-    await db.disconnect();
-    console.log('[PowerSync] Disconnected from PowerSync cloud service');
+    await initLocalDatabase();
+    await db.disconnectAndClear();
   } catch (error) {
-    console.error('[PowerSync] Error disconnecting:', error);
+    console.error('[PowerSync] Error al desconectar/limpiar:', error);
   }
 }

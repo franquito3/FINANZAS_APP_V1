@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -15,7 +15,8 @@ import { exportTransactionsToCSV } from '../services/reports/csvExporter';
 import { generateAndSharePDFReport } from '../services/reports/pdfGenerator';
 import { DashboardSummary } from '../types';
 import { formatCurrency } from '../utils';
-import { db } from '../db/powersync';
+import { initLocalDatabase } from '../db/powersync';
+import { useTableChanges } from '../hooks/useTableChanges';
 
 export const ReportsScreen: React.FC = () => {
   const [summary, setSummary] = useState<DashboardSummary>({
@@ -33,6 +34,7 @@ export const ReportsScreen: React.FC = () => {
 
   const loadMetrics = useCallback(async () => {
     try {
+      await initLocalDatabase();
       const [sum, txs] = await Promise.all([
         financeService.getDashboardSummary('all'),
         financeService.getTransactions(1000, 'all'),
@@ -44,19 +46,7 @@ export const ReportsScreen: React.FC = () => {
     }
   }, []);
 
-  useEffect(() => {
-    loadMetrics();
-
-    const unsubscribe = db.registerListener({
-      schemaChanged: () => {
-        loadMetrics();
-      },
-    });
-
-    return () => {
-      unsubscribe?.();
-    };
-  }, [loadMetrics]);
+  useTableChanges(['transactions', 'budgets'], loadMetrics);
 
   const handleExportCSV = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);

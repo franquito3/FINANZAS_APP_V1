@@ -64,6 +64,9 @@ export const transactionsTable = new Table(
       wallet: ['wallet_id'],
       category: ['category_id'],
     },
+    // Exposes previous values (incl. `version`) on UPDATE/DELETE CRUD entries,
+    // used by the connector for optimistic concurrency control.
+    trackPrevious: true,
   }
 );
 
@@ -83,14 +86,17 @@ export const budgetsTable = new Table(
 );
 
 // 6. Local Conflict Audit Table (Tracks concurrent collisions)
-export const syncConflictsTable = new Table({
-  entity_table: column.text,
-  record_id: column.text,
-  local_data: column.text,
-  remote_data: column.text,
-  detected_at: column.text,
-  resolved: column.integer, // 0 for unresolved, 1 for resolved
-});
+export const syncConflictsTable = new Table(
+  {
+    entity_table: column.text,
+    record_id: column.text,
+    local_data: column.text,
+    remote_data: column.text,
+    detected_at: column.text,
+    resolved: column.integer, // 0 for unresolved, 1 for resolved
+  },
+  { localOnly: true } // Never uploaded, never synced
+);
 
 export const AppSchema = new Schema({
   profiles: profilesTable,

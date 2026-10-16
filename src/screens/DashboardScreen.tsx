@@ -16,11 +16,14 @@ import { financeService } from '../services/data/financeService';
 import { seedLocalDefaults } from '../services/data/seedData';
 import { DashboardSummary, Transaction, Wallet } from '../types';
 import { THEME } from '../constants';
-import { db } from '../db/powersync';
+import { initLocalDatabase } from '../db/powersync';
 import { useSyncStatus } from '../hooks/useSyncStatus';
+import { useTableChanges } from '../hooks/useTableChanges';
+import { useAuth } from '../context/AuthContext';
 
 export const DashboardScreen: React.FC = () => {
   const syncStatus = useSyncStatus();
+  const { user } = useAuth();
   const [summary, setSummary] = useState<DashboardSummary>({
     totalBalance: 0,
     totalIncome: 0,
@@ -38,7 +41,8 @@ export const DashboardScreen: React.FC = () => {
 
   const loadData = useCallback(async () => {
     try {
-      await seedLocalDefaults();
+      await initLocalDatabase();
+      await seedLocalDefaults(user?.id);
       const [sum, txs, wts] = await Promise.all([
         financeService.getDashboardSummary(selectedWalletId),
         financeService.getTransactions(30, selectedWalletId),
@@ -54,21 +58,13 @@ export const DashboardScreen: React.FC = () => {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [selectedWalletId]);
+  }, [selectedWalletId, user?.id]);
+
+  // Reload whenever local writes or remote sync updates any financial table
+  useTableChanges(['transactions', 'wallets', 'categories', 'budgets'], loadData);
 
   useEffect(() => {
     loadData();
-
-    // Listen for reactive SQLite changes
-    const unsubscribe = db.registerListener({
-      schemaChanged: () => {
-        loadData();
-      },
-    });
-
-    return () => {
-      unsubscribe?.();
-    };
   }, [loadData]);
 
   const handleRefresh = () => {

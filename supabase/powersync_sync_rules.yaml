@@ -1,0 +1,32 @@
+# ==============================================================================
+# PowerSync Sync Rules para ProyectoX Finanzas (Supabase PostgreSQL)
+# Copiar y pegar en el panel de PowerSync -> Sync Rules -> Deploy
+# ==============================================================================
+
+bucket_definitions:
+  user_finance_bucket:
+    # Extrae el UUID del usuario autenticado desde el JWT de Supabase (claim 'sub')
+    parameters: |
+      SELECT request.user_id() AS user_id
+
+    # Replicación en tiempo real aislada por usuario (coincide con el esquema local SQLite)
+    data:
+      - SELECT id, email, full_name, avatar_url, default_currency, created_at, updated_at
+        FROM public.profiles
+        WHERE id = bucket.user_id
+
+      - SELECT id, user_id, name, currency_code, is_active, created_at, updated_at
+        FROM public.wallets
+        WHERE user_id = bucket.user_id
+
+      - SELECT id, user_id, name, icon_identifier, color_hex, type, created_at, updated_at
+        FROM public.categories
+        WHERE user_id = bucket.user_id
+
+      - SELECT id, user_id, wallet_id, category_id, amount, transaction_date, notes, version, created_at, updated_at
+        FROM public.transactions
+        WHERE user_id = bucket.user_id
+
+      - SELECT id, user_id, category_id, limit_amount, period, start_date, end_date, created_at, updated_at
+        FROM public.budgets
+        WHERE user_id = bucket.user_id
