@@ -3,12 +3,12 @@ import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, View, SafeAreaView, TouchableOpacity, Text } from 'react-native';
 import { validateEnv } from './src/config/env';
 import { AuthProvider } from './src/context/AuthContext';
-import { AuthScreen, OfflineSyncScreen } from './src/screens';
+import { AuthScreen, DashboardScreen, OfflineSyncScreen } from './src/screens';
 import { initPowerSync } from './src/db/powersync';
 import { THEME } from './src/constants';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'sync' | 'auth'>('sync');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'sync' | 'auth'>('dashboard');
 
   useEffect(() => {
     validateEnv();
@@ -18,8 +18,19 @@ export default function App() {
   return (
     <AuthProvider>
       <SafeAreaView style={styles.safeArea}>
-        {/* Navigation Tabs for Phase 2 & 3 inspection */}
+        {/* Navigation Header Tabs */}
         <View style={styles.tabBar}>
+          <TouchableOpacity
+            style={[styles.tabItem, activeTab === 'dashboard' && styles.tabItemActive]}
+            onPress={() => setActiveTab('dashboard')}
+          >
+            <Text
+              style={[styles.tabText, activeTab === 'dashboard' && styles.tabTextActive]}
+            >
+              📊 Finanzas
+            </Text>
+          </TouchableOpacity>
+
           <TouchableOpacity
             style={[styles.tabItem, activeTab === 'sync' && styles.tabItemActive]}
             onPress={() => setActiveTab('sync')}
@@ -27,7 +38,7 @@ export default function App() {
             <Text
               style={[styles.tabText, activeTab === 'sync' && styles.tabTextActive]}
             >
-              ⚡ Motor Offline (SQLite)
+              ⚡ Offline Sync
             </Text>
           </TouchableOpacity>
 
@@ -38,13 +49,16 @@ export default function App() {
             <Text
               style={[styles.tabText, activeTab === 'auth' && styles.tabTextActive]}
             >
-              🔒 Autenticación
+              🔒 Sesión
             </Text>
           </TouchableOpacity>
         </View>
 
+        {/* Tab Content */}
         <View style={styles.content}>
-          {activeTab === 'sync' ? <OfflineSyncScreen /> : <AuthScreen />}
+          {activeTab === 'dashboard' && <DashboardScreen />}
+          {activeTab === 'sync' && <OfflineSyncScreen />}
+          {activeTab === 'auth' && <AuthScreen />}
         </View>
 
         <StatusBar style="dark" />
@@ -63,8 +77,8 @@ const styles = StyleSheet.create({
     backgroundColor: THEME.colors.card,
     borderBottomWidth: 1,
     borderBottomColor: THEME.colors.border,
-    paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingHorizontal: 8,
+    paddingTop: 6,
   },
   tabItem: {
     flex: 1,
@@ -77,7 +91,7 @@ const styles = StyleSheet.create({
     borderBottomColor: THEME.colors.primary,
   },
   tabText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     color: THEME.colors.textSecondary,
   },
