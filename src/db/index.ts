@@ -1,2 +1,4 @@
-// Database layer exports (PowerSync and SQLite initialization)
-export {};
+export * from './schema';
+export * from './connector';
+export * from './powersync';
+export * from './conflictResolution';
