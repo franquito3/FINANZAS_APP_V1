@@ -3,12 +3,17 @@ import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, View, SafeAreaView, TouchableOpacity, Text } from 'react-native';
 import { validateEnv } from './src/config/env';
 import { AuthProvider } from './src/context/AuthContext';
-import { AuthScreen, DashboardScreen, OfflineSyncScreen } from './src/screens';
+import {
+  AuthScreen,
+  DashboardScreen,
+  OfflineSyncScreen,
+  ReportsScreen,
+} from './src/screens';
 import { initPowerSync } from './src/db/powersync';
 import { THEME } from './src/constants';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'sync' | 'auth'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'reports' | 'sync' | 'auth'>('dashboard');
 
   useEffect(() => {
     validateEnv();
@@ -32,13 +37,24 @@ export default function App() {
           </TouchableOpacity>
 
           <TouchableOpacity
+            style={[styles.tabItem, activeTab === 'reports' && styles.tabItemActive]}
+            onPress={() => setActiveTab('reports')}
+          >
+            <Text
+              style={[styles.tabText, activeTab === 'reports' && styles.tabTextActive]}
+            >
+              📄 Reportes
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
             style={[styles.tabItem, activeTab === 'sync' && styles.tabItemActive]}
             onPress={() => setActiveTab('sync')}
           >
             <Text
               style={[styles.tabText, activeTab === 'sync' && styles.tabTextActive]}
             >
-              ⚡ Offline Sync
+              ⚡ Offline
             </Text>
           </TouchableOpacity>
 
@@ -57,6 +73,7 @@ export default function App() {
         {/* Tab Content */}
         <View style={styles.content}>
           {activeTab === 'dashboard' && <DashboardScreen />}
+          {activeTab === 'reports' && <ReportsScreen />}
           {activeTab === 'sync' && <OfflineSyncScreen />}
           {activeTab === 'auth' && <AuthScreen />}
         </View>
@@ -77,7 +94,7 @@ const styles = StyleSheet.create({
     backgroundColor: THEME.colors.card,
     borderBottomWidth: 1,
     borderBottomColor: THEME.colors.border,
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
     paddingTop: 6,
   },
   tabItem: {
@@ -91,7 +108,7 @@ const styles = StyleSheet.create({
     borderBottomColor: THEME.colors.primary,
   },
   tabText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     color: THEME.colors.textSecondary,
   },
