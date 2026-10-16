@@ -1,13 +1,15 @@
 {
   "expo": {
-    "name": "app-temp",
-    "slug": "app-temp",
+    "name": "ProyectoX Finanzas",
+    "slug": "proyectox-finance",
+    "scheme": "proyectox",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.proyectox.finance"
     },
     "android": {
       "adaptiveIcon": {
@@ -16,7 +18,8 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.proyectox.finance"
     },
     "web": {
       "favicon": "./assets/favicon.png"
