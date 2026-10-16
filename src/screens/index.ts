@@ -1,2 +1,1 @@
-// Screen components exports
-export {};
+export * from './AuthScreen';

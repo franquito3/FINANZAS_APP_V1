@@ -1,2 +1,3 @@
-// Service layer exports (Supabase, Auth, Sync, Reports)
-export {};
+export * from './supabase/client';
+export * from './storage/secureStoreAdapter';
+export * from './auth/googleAuth';
