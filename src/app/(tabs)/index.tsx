@@ -1,12 +1,13 @@
 import React from 'react';
 import { StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 import { DashboardScreen } from '../../screens/DashboardScreen';
-import { THEME } from '../../constants';
 
 export default function DashboardRoute() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      <StatusBar style="light" />
       <DashboardScreen />
     </SafeAreaView>
   );
@@ -15,6 +16,6 @@ export default function DashboardRoute() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: THEME.colors.background,
+    backgroundColor: '#070D2D',
   },
 });

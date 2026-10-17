@@ -29,6 +29,16 @@
       "expo-web-browser",
       "expo-sharing",
       "expo-router"
-    ]
+    ],
+    "extra": {
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "286ee583-a0a2-4d3c-b313-1bcecc949a85"
+      }
+    }
   }
 }

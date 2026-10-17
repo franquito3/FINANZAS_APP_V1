@@ -1,5 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Alert } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { Transaction } from '../types';
 import { THEME } from '../constants';
 import { formatCurrency } from '../utils';
@@ -11,6 +12,7 @@ interface Props {
 
 export const TransactionList: React.FC<Props> = ({ transactions, onDeleteTransaction }) => {
   const confirmDelete = (tx: Transaction) => {
+    Haptics.selectionAsync();
     Alert.alert(
       'Eliminar Transacción',
       `¿Deseas eliminar "${tx.notes || tx.category_name || 'Transacción'}" por ${formatCurrency(tx.amount)}?`,
@@ -21,170 +23,176 @@ export const TransactionList: React.FC<Props> = ({ transactions, onDeleteTransac
     );
   };
 
-  if (transactions.length === 0) {
-    return (
-      <View style={styles.emptyContainer}>
-        <Text style={styles.emptyIcon}>📝</Text>
-        <Text style={styles.emptyTitle}>Sin movimientos</Text>
-        <Text style={styles.emptySubtitle}>
-          Toca el botón (+) para registrar tu primer gasto o ingreso rápidamente.
-        </Text>
-      </View>
-    );
-  }
+  // Net sum of displayed transactions for the right header badge
+  const netRecent = transactions.reduce(
+    (acc, tx) => acc + (tx.category_type === 'INGRESO' ? tx.amount : -tx.amount),
+    0
+  );
 
   return (
     <View style={styles.container}>
-      <Text style={styles.sectionTitle}>Movimientos Recientes</Text>
-      <View style={styles.listCard}>
-        {transactions.map((tx, index) => {
-          const isIncome = tx.category_type === 'INGRESO';
-          const isLast = index === transactions.length - 1;
+      <View style={styles.headerRow}>
+        <Text style={styles.sectionTitle}>Transacciones</Text>
+        {transactions.length > 0 && (
+          <Text style={styles.headerTotal}>{formatCurrency(Math.abs(netRecent))}</Text>
+        )}
+      </View>
 
-          return (
-            <TouchableOpacity
-              key={tx.id}
-              style={[styles.itemRow, !isLast && styles.borderBottom]}
-              onLongPress={() => confirmDelete(tx)}
-              activeOpacity={0.7}
-            >
-              {/* Category Icon */}
-              <View
-                style={[
-                  styles.iconBox,
-                  { backgroundColor: (tx.category_color || '#3B82F6') + '20' },
-                ]}
+      {transactions.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyIcon}>✨</Text>
+          <Text style={styles.emptyTitle}>Sin movimientos aún</Text>
+          <Text style={styles.emptySubtitle}>
+            Usa los botones &quot;+ Ingreso&quot; o &quot;- Gasto&quot; en tu tarjeta superior para registrar en segundos.
+          </Text>
+        </View>
+      ) : (
+        <View style={styles.listWrapper}>
+          {transactions.map((tx, index) => {
+            const isIncome = tx.category_type === 'INGRESO';
+            const isLast = index === transactions.length - 1;
+            const accentColor = tx.category_color || '#8B5CF6';
+
+            return (
+              <TouchableOpacity
+                key={tx.id}
+                style={[styles.itemRow, !isLast && styles.borderBottom]}
+                onPress={() => Haptics.selectionAsync()}
+                onLongPress={() => confirmDelete(tx)}
+                activeOpacity={0.7}
               >
-                <Text style={styles.iconText}>{tx.category_icon || '🏷️'}</Text>
-              </View>
-
-              {/* Transaction details */}
-              <View style={styles.detailsBox}>
-                <Text style={styles.categoryName}>
-                  {tx.category_name || 'Sin Categoría'}
-                </Text>
-                <Text style={styles.notesText} numberOfLines={1}>
-                  {tx.notes ? `${tx.notes} • ` : ''}
-                  {tx.wallet_name || 'Billetera'}
-                </Text>
-              </View>
-
-              {/* Amount & Time */}
-              <View style={styles.amountBox}>
-                <Text
+                {/* Circular Category Avatar */}
+                <View
                   style={[
-                    styles.amountText,
-                    isIncome ? styles.incomeColor : styles.expenseColor,
+                    styles.avatarCircle,
+                    { backgroundColor: accentColor + '1E' },
                   ]}
                 >
-                  {isIncome ? '+' : '-'}
-                  {formatCurrency(tx.amount)}
-                </Text>
-                <Text style={styles.timeText}>
-                  {new Date(tx.transaction_date).toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+                  <Text style={styles.iconText}>{tx.category_icon || '🏷️'}</Text>
+                </View>
+
+                {/* Category & Subtitle */}
+                <View style={styles.detailsBox}>
+                  <Text style={styles.categoryName} numberOfLines={1}>
+                    {tx.category_name || 'Movimiento'}
+                  </Text>
+                  <Text style={styles.subtitleText} numberOfLines={1}>
+                    {tx.notes ? `${tx.notes} • ` : ''}
+                    {new Date(tx.transaction_date).toLocaleDateString('es-PE', {
+                      day: '2-digit',
+                      month: 'short',
+                    })}
+                  </Text>
+                </View>
+
+                {/* Formatted Amount in Soles */}
+                <View style={styles.amountBox}>
+                  <Text
+                    style={[
+                      styles.amountText,
+                      isIncome ? styles.incomeColor : styles.expenseColor,
+                    ]}
+                  >
+                    {isIncome ? '+ ' : '- '}
+                    {formatCurrency(tx.amount)}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    marginTop: 16,
-    marginBottom: 80, // Space for the floating FAB
+    flex: 1,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+    paddingHorizontal: 2,
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     color: THEME.colors.textPrimary,
-    marginBottom: 10,
   },
-  listCard: {
-    backgroundColor: THEME.colors.card,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: THEME.colors.border,
-    overflow: 'hidden',
+  headerTotal: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: THEME.colors.textPrimary,
+  },
+  listWrapper: {
+    backgroundColor: '#FFFFFF',
   },
   itemRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 14,
+    paddingVertical: 11,
+    paddingHorizontal: 2,
     gap: 12,
   },
   borderBottom: {
-    borderBottomWidth: 1,
-    borderBottomColor: THEME.colors.border,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E2E8F0',
   },
-  iconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+  avatarCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
   },
   iconText: {
-    fontSize: 20,
+    fontSize: 18,
   },
   detailsBox: {
     flex: 1,
-    gap: 2,
+    gap: 1,
   },
   categoryName: {
-    fontSize: 14,
+    fontSize: 14.5,
     fontWeight: '600',
-    color: THEME.colors.textPrimary,
+    color: '#1E293B',
   },
-  notesText: {
-    fontSize: 12,
-    color: THEME.colors.textSecondary,
+  subtitleText: {
+    fontSize: 11.5,
+    color: '#64748B',
   },
   amountBox: {
     alignItems: 'flex-end',
-    gap: 2,
   },
   amountText: {
-    fontSize: 15,
+    fontSize: 14.5,
     fontWeight: '700',
   },
   incomeColor: {
     color: THEME.colors.success,
   },
   expenseColor: {
-    color: THEME.colors.textPrimary,
-  },
-  timeText: {
-    fontSize: 11,
-    color: THEME.colors.textSecondary,
+    color: '#1E293B',
   },
   emptyContainer: {
     alignItems: 'center',
-    paddingVertical: 36,
-    paddingHorizontal: 24,
-    backgroundColor: THEME.colors.card,
-    borderRadius: 16,
-    marginTop: 16,
-    borderWidth: 1,
-    borderColor: THEME.colors.border,
+    paddingVertical: 28,
+    paddingHorizontal: 20,
   },
   emptyIcon: {
-    fontSize: 36,
+    fontSize: 30,
     marginBottom: 8,
   },
   emptyTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     color: THEME.colors.textPrimary,
   },
   emptySubtitle: {
-    fontSize: 13,
+    fontSize: 12.5,
     color: THEME.colors.textSecondary,
     textAlign: 'center',
     marginTop: 4,

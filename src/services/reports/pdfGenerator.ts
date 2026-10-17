@@ -15,8 +15,10 @@ function escapeHtml(str: string): string {
 }
 
 /**
- * Builds the HTML document with strict CSS Paged Media rules (@page, break-inside, break-before)
- * so tables, cards and SVG charts are never mutilated across A4 page breaks.
+ * Builds a compact, high-density A4 HTML financial report inspired by the
+ * ProyectoX Finanzas Liquid Glass design (deep navy-to-violet hero header,
+ * compact budget semaphore, category breakdown, and dense transaction feed)
+ * with strict CSS Paged Media rules (@page, break-inside: avoid).
  */
 export function buildReportHtml(params: {
   summary: DashboardSummary;
@@ -30,12 +32,16 @@ export function buildReportHtml(params: {
   const expenseTransactions = transactions.filter((t) => t.category_type !== 'INGRESO');
 
   // Group expenses by category for visual breakdown
-  const categoryMap = new Map<string, { name: string; color: string; amount: number }>();
+  const categoryMap = new Map<
+    string,
+    { name: string; color: string; icon: string; amount: number }
+  >();
   for (const tx of expenseTransactions) {
     const key = tx.category_id || 'other';
     const existing = categoryMap.get(key) || {
       name: tx.category_name || 'Otros',
       color: tx.category_color || '#3B82F6',
+      icon: tx.category_icon || '💸',
       amount: 0,
     };
     existing.amount += Number(tx.amount);
@@ -43,24 +49,28 @@ export function buildReportHtml(params: {
   }
   const categoryBreakdown = Array.from(categoryMap.values()).sort((a, b) => b.amount - a.amount);
 
+  const globalPct = Math.min(Math.max(summary.budgetPercentage || 0, 0), 100);
+  const globalBarColor =
+    globalPct >= 90 ? '#EF4444' : globalPct >= 70 ? '#F59E0B' : '#2563EB';
+
   const budgetRowsHtml =
     budgets.length === 0
-      ? `<p class="empty-msg">Sin presupuestos configurados.</p>`
+      ? `<div class="empty-msg">Sin presupuestos específicos configurados.</div>`
       : budgets
           .map((b) => {
-            const pct = b.percentage ?? 0;
-            const barColor = pct >= 90 ? '#EF4444' : pct >= 70 ? '#F59E0B' : '#10B981';
+            const pct = Math.min(Math.max(b.percentage ?? 0, 0), 100);
+            const barColor = pct >= 90 ? '#EF4444' : pct >= 70 ? '#F59E0B' : '#2563EB';
             return `
-            <div class="card budget-item">
+            <div class="budget-item">
               <div class="budget-header">
-                <strong>${escapeHtml(b.category_name || 'Categoría')} (${escapeHtml(b.period)})</strong>
-                <span style="color: ${barColor}; font-weight: 700;">${pct}% consumido</span>
+                <span class="budget-cat">${escapeHtml(b.category_name || 'Categoría')} <small>(${escapeHtml(b.period)})</small></span>
+                <span class="budget-pct" style="color: ${barColor};">${pct}% consumido</span>
               </div>
               <div class="progress-track">
                 <div class="progress-fill" style="width: ${pct}%; background-color: ${barColor};"></div>
               </div>
               <div class="budget-meta">
-                Gastado: ${formatCurrency(b.spent_amount ?? 0)} / Límite: ${formatCurrency(b.limit_amount)}
+                Gastado: <strong>${formatCurrency(b.spent_amount ?? 0)}</strong> de ${formatCurrency(b.limit_amount)}
               </div>
             </div>
           `;
@@ -69,7 +79,7 @@ export function buildReportHtml(params: {
 
   const categorySvgBarsHtml =
     categoryBreakdown.length === 0
-      ? `<p class="empty-msg">No se registran egresos en el período actual.</p>`
+      ? `<div class="empty-msg">Sin egresos registrados en el período.</div>`
       : categoryBreakdown
           .map((cat) => {
             const pct =
@@ -79,43 +89,61 @@ export function buildReportHtml(params: {
             return `
             <div class="chart-row">
               <div class="chart-label">
-                <span class="dot" style="background-color: ${cat.color};"></span>
-                <span>${escapeHtml(cat.name)}</span>
+                <span class="cat-badge" style="background-color: ${cat.color};">${cat.icon}</span>
+                <span class="cat-name">${escapeHtml(cat.name)}</span>
               </div>
               <div class="chart-bar-wrap">
-                <svg width="100%" height="14" viewBox="0 0 200 14" preserveAspectRatio="none">
-                  <rect x="0" y="0" width="200" height="14" rx="4" fill="#E2E8F0" />
-                  <rect x="0" y="0" width="${Math.max(pct * 2, 4)}" height="14" rx="4" fill="${cat.color}" />
+                <svg width="100%" height="8" viewBox="0 0 200 8" preserveAspectRatio="none">
+                  <rect x="0" y="0" width="200" height="8" rx="4" fill="#F1F5F9" />
+                  <rect x="0" y="0" width="${Math.max(pct * 2, 4)}" height="8" rx="4" fill="${cat.color}" />
                 </svg>
               </div>
-              <div class="chart-value">${formatCurrency(cat.amount)} (${pct}%)</div>
+              <div class="chart-value">${formatCurrency(cat.amount)} <span class="pct-muted">(${pct}%)</span></div>
             </div>
           `;
           })
           .join('');
 
-  const renderTableRows = (list: Transaction[]) => {
+  const renderTransactionRows = (list: Transaction[]) => {
     if (list.length === 0) {
-      return `<tr><td colspan="5" class="empty-cell">No hay registros en esta sección</td></tr>`;
+      return `<tr><td colspan="5" class="empty-cell">No hay movimientos registrados</td></tr>`;
     }
     return list
-      .map(
-        (tx) => `
-      <tr>
-        <td>${new Date(tx.transaction_date).toLocaleDateString('es-PE', {
-          year: 'numeric',
-          month: 'short',
+      .map((tx) => {
+        const isIncome = tx.category_type === 'INGRESO';
+        const badgeColor = tx.category_color || (isIncome ? '#10B981' : '#3B82F6');
+        const icon = tx.category_icon || (isIncome ? '💰' : '💸');
+        const title = tx.notes && tx.notes.trim().length > 0 ? tx.notes : tx.category_name || 'Operación';
+        const dateStr = new Date(tx.transaction_date).toLocaleDateString('es-PE', {
           day: '2-digit',
-        })}</td>
-        <td><strong>${escapeHtml(tx.category_name || 'Sin Categoría')}</strong></td>
-        <td>${escapeHtml(tx.wallet_name || 'Efectivo')}</td>
-        <td>${escapeHtml(tx.notes || '-')}</td>
-        <td class="amount-col ${tx.category_type === 'INGRESO' ? 'text-income' : 'text-expense'}">
-          ${tx.category_type === 'INGRESO' ? '+' : '-'}${formatCurrency(tx.amount)}
-        </td>
-      </tr>
-    `
-      )
+          month: 'short',
+          year: 'numeric',
+        });
+
+        return `
+        <tr>
+          <td class="col-cat">
+            <div class="tx-cat-cell">
+              <span class="tx-avatar" style="background-color: ${badgeColor};">${icon}</span>
+              <div>
+                <div class="tx-title">${escapeHtml(title)}</div>
+                <div class="tx-sub">${escapeHtml(tx.category_name || 'General')}</div>
+              </div>
+            </div>
+          </td>
+          <td class="col-date">${dateStr}</td>
+          <td class="col-wallet"><span class="wallet-pill">${escapeHtml(tx.wallet_name || 'Principal')}</span></td>
+          <td class="col-type">
+            <span class="type-pill ${isIncome ? 'pill-income' : 'pill-expense'}">
+              ${isIncome ? '+ Ingreso' : '- Gasto'}
+            </span>
+          </td>
+          <td class="col-amount ${isIncome ? 'text-income' : 'text-expense'}">
+            ${isIncome ? '+' : '-'} ${formatCurrency(tx.amount)}
+          </td>
+        </tr>
+      `;
+      })
       .join('');
   };
 
@@ -127,11 +155,11 @@ export function buildReportHtml(params: {
   <title>Reporte Financiero - ${escapeHtml(APP_CONFIG.NAME)}</title>
   <style>
     /* =========================================================================
-       CSS Paged Media Module Rules for Formal A4 Financial Print
+       Compact A4 Portrait Layout - ProyectoX Finanzas (Liquid Glass Edition)
        ========================================================================= */
     @page {
       size: A4 portrait;
-      margin: 1in;
+      margin: 10mm 12mm;
     }
 
     @media print {
@@ -151,152 +179,180 @@ export function buildReportHtml(params: {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       color: #0F172A;
       background-color: #FFFFFF;
-      line-height: 1.5;
-      font-size: 12px;
+      line-height: 1.38;
+      font-size: 10.5px;
     }
 
-    /* Prevent destructive fragmentation across page breaks */
-    .card,
-    .kpi-grid,
-    .chart-container,
+    /* Prevent awkward cuts across pages */
+    .hero-banner,
+    .semaphore-box,
+    .panel-card,
+    .two-col-grid,
     .budget-item,
-    table,
+    .chart-row,
     tr {
       break-inside: avoid;
       page-break-inside: avoid;
     }
 
-    /* Intentional section page break */
-    .page-break-section {
-      break-before: always;
-      page-break-before: always;
+    /* Top Hero Gradient Banner matching DashboardScreen */
+    .hero-banner {
+      background: linear-gradient(135deg, #070D2D 0%, #161D65 52%, #351875 100%);
+      border-radius: 20px;
+      padding: 18px 20px;
+      color: #FFFFFF;
+      margin-bottom: 14px;
+      box-shadow: 0 8px 20px rgba(7, 13, 45, 0.18);
     }
 
-    .report-header {
-      border-bottom: 2px solid #1E40AF;
-      padding-bottom: 14px;
-      margin-bottom: 24px;
+    .hero-top-row {
       display: flex;
       justify-content: space-between;
-      align-items: flex-end;
+      align-items: flex-start;
+      margin-bottom: 14px;
     }
 
     .brand-title {
-      font-size: 22px;
+      font-size: 18px;
       font-weight: 800;
-      color: #1E40AF;
+      letter-spacing: -0.3px;
+      color: #FFFFFF;
+      line-height: 1.1;
     }
 
     .brand-subtitle {
-      font-size: 11px;
-      color: #64748B;
-      margin-top: 2px;
+      font-size: 14px;
+      font-weight: 400;
+      color: rgba(255, 255, 255, 0.85);
+      margin-top: 1px;
     }
 
-    .meta-info {
+    .hero-meta-right {
       text-align: right;
-      font-size: 11px;
-      color: #64748B;
     }
 
-    .section-title {
-      font-size: 15px;
-      font-weight: 700;
-      color: #0F172A;
-      margin-top: 20px;
-      margin-bottom: 10px;
-      border-left: 4px solid #1E40AF;
-      padding-left: 8px;
-    }
-
-    .kpi-grid {
-      display: flex;
-      gap: 12px;
-      margin-bottom: 20px;
-    }
-
-    .kpi-box {
-      flex: 1;
-      border: 1px solid #E2E8F0;
-      border-radius: 10px;
-      padding: 14px;
-      background-color: #F8FAFC;
-    }
-
-    .kpi-label {
-      font-size: 10px;
-      text-transform: uppercase;
-      color: #64748B;
-      font-weight: 700;
-    }
-
-    .kpi-value {
-      font-size: 18px;
+    .sqlite-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      border-radius: 999px;
+      padding: 3px 10px;
+      font-size: 9px;
       font-weight: 800;
-      margin-top: 4px;
+      letter-spacing: 0.6px;
+      color: #FFFFFF;
+      text-transform: uppercase;
+      margin-bottom: 4px;
     }
 
-    .text-primary { color: #1E40AF; }
-    .text-income { color: #10B981; }
-    .text-expense { color: #EF4444; }
-
-    .card {
-      border: 1px solid #E2E8F0;
-      border-radius: 10px;
-      padding: 14px;
-      margin-bottom: 14px;
-      background-color: #FFFFFF;
-    }
-
-    .chart-row {
-      display: flex;
-      align-items: center;
-      margin-bottom: 8px;
-      gap: 10px;
-    }
-
-    .chart-label {
-      width: 120px;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      font-weight: 600;
-    }
-
-    .dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 4px;
+    .sqlite-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 3px;
+      background-color: #10B981;
       display: inline-block;
     }
 
-    .chart-bar-wrap {
-      flex: 1;
+    .meta-date {
+      font-size: 9.5px;
+      color: rgba(255, 255, 255, 0.72);
     }
 
-    .chart-value {
-      width: 110px;
-      text-align: right;
-      font-weight: 600;
-      color: #334155;
-    }
-
-    .budget-item {
-      margin-bottom: 10px;
-    }
-
-    .budget-header {
+    /* Liquid Glass Balance Card inside Hero */
+    .glass-balance-card {
+      background: rgba(255, 255, 255, 0.10);
+      border: 1.2px solid rgba(56, 189, 248, 0.45);
+      border-radius: 16px;
+      padding: 14px 16px;
       display: flex;
       justify-content: space-between;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .balance-label {
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.78);
+      margin-bottom: 3px;
+    }
+
+    .balance-amount {
+      font-size: 24px;
+      font-weight: 800;
+      letter-spacing: -0.6px;
+      color: #FFFFFF;
+    }
+
+    .quick-pills-wrap {
+      display: flex;
+      gap: 10px;
+    }
+
+    .quick-pill {
+      background: rgba(15, 23, 42, 0.48);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 12px;
+      padding: 8px 12px;
+      min-width: 125px;
+    }
+
+    .quick-pill-label {
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.72);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .quick-pill-value {
+      font-size: 13px;
+      font-weight: 800;
+      margin-top: 2px;
+    }
+
+    .val-income { color: #34D399; }
+    .val-expense { color: #F87171; }
+
+    /* Compact Budget Semaphore Card */
+    .semaphore-box {
+      background-color: #F8FAFC;
+      border: 1px solid #E2E8F0;
+      border-radius: 14px;
+      padding: 10px 14px;
+      margin-bottom: 12px;
+    }
+
+    .semaphore-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
       margin-bottom: 6px;
     }
 
+    .semaphore-title {
+      font-size: 11.5px;
+      font-weight: 800;
+      color: #0F172A;
+    }
+
+    .semaphore-pct {
+      font-size: 10.5px;
+      font-weight: 700;
+      color: #475569;
+    }
+
     .progress-track {
-      height: 8px;
+      height: 7px;
       background-color: #E2E8F0;
       border-radius: 4px;
       overflow: hidden;
-      margin-bottom: 4px;
     }
 
     .progress-fill {
@@ -304,138 +360,369 @@ export function buildReportHtml(params: {
       border-radius: 4px;
     }
 
-    .budget-meta {
+    /* Two-column compact middle section */
+    .two-col-grid {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .col-half {
+      flex: 1;
+      border: 1px solid #E2E8F0;
+      border-radius: 14px;
+      padding: 11px 13px;
+      background-color: #FFFFFF;
+    }
+
+    .panel-title {
+      font-size: 11px;
+      font-weight: 800;
+      color: #0F172A;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      margin-bottom: 8px;
+      padding-bottom: 5px;
+      border-bottom: 1px solid #F1F5F9;
+    }
+
+    .chart-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+
+    .chart-label {
+      width: 105px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-weight: 700;
       font-size: 10px;
+      color: #1E293B;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .cat-badge {
+      width: 18px;
+      height: 18px;
+      border-radius: 9px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9px;
+      color: #FFFFFF;
+      flex-shrink: 0;
+    }
+
+    .chart-bar-wrap {
+      flex: 1;
+    }
+
+    .chart-value {
+      width: 92px;
+      text-align: right;
+      font-weight: 700;
+      font-size: 9.5px;
+      color: #0F172A;
+    }
+
+    .pct-muted {
+      color: #64748B;
+      font-weight: 600;
+    }
+
+    .budget-item {
+      margin-bottom: 7px;
+      padding-bottom: 6px;
+      border-bottom: 1px dashed #F1F5F9;
+    }
+
+    .budget-item:last-child {
+      margin-bottom: 0;
+      padding-bottom: 0;
+      border-bottom: none;
+    }
+
+    .budget-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      margin-bottom: 4px;
+    }
+
+    .budget-cat {
+      font-weight: 700;
+      color: #1E293B;
+    }
+
+    .budget-cat small {
+      color: #64748B;
+      font-weight: 600;
+    }
+
+    .budget-pct {
+      font-weight: 800;
+    }
+
+    .budget-meta {
+      font-size: 9px;
       color: #64748B;
       text-align: right;
+      margin-top: 3px;
+    }
+
+    /* Dense Transactions Feed Table */
+    .section-header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+      margin-top: 4px;
+    }
+
+    .section-title {
+      font-size: 13px;
+      font-weight: 800;
+      color: #0F172A;
+      letter-spacing: -0.2px;
+    }
+
+    .section-count {
+      font-size: 10px;
+      font-weight: 700;
+      color: #64748B;
+      background-color: #F1F5F9;
+      padding: 2px 8px;
+      border-radius: 999px;
     }
 
     table {
       width: 100%;
       border-collapse: collapse;
-      margin-top: 8px;
-      margin-bottom: 18px;
+      border: 1px solid #E2E8F0;
+      border-radius: 12px;
+      overflow: hidden;
+      margin-bottom: 10px;
     }
 
     th {
-      background-color: #F1F5F9;
-      color: #334155;
+      background-color: #F8FAFC;
+      color: #475569;
       text-align: left;
-      font-size: 11px;
-      font-weight: 700;
-      padding: 8px 10px;
-      border-bottom: 2px solid #CBD5E1;
+      font-size: 9.5px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      padding: 7px 10px;
+      border-bottom: 1px solid #E2E8F0;
     }
 
     td {
-      padding: 8px 10px;
-      border-bottom: 1px solid #E2E8F0;
-      font-size: 11px;
+      padding: 6px 10px;
+      border-bottom: 1px solid #F1F5F9;
+      font-size: 10px;
       color: #1E293B;
+      vertical-align: middle;
     }
 
-    .amount-col {
-      text-align: right;
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    .tx-cat-cell {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .tx-avatar {
+      width: 24px;
+      height: 24px;
+      border-radius: 12px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      color: #FFFFFF;
+      flex-shrink: 0;
+    }
+
+    .tx-title {
+      font-weight: 700;
+      color: #0F172A;
+      font-size: 10px;
+      line-height: 1.2;
+    }
+
+    .tx-sub {
+      font-size: 8.5px;
+      color: #64748B;
+    }
+
+    .col-date {
+      width: 85px;
+      color: #64748B;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .col-wallet {
+      width: 90px;
+    }
+
+    .wallet-pill {
+      background-color: #F1F5F9;
+      color: #334155;
+      padding: 2px 7px;
+      border-radius: 6px;
+      font-size: 9px;
       font-weight: 700;
     }
 
+    .col-type {
+      width: 78px;
+    }
+
+    .type-pill {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 6px;
+      font-size: 8.5px;
+      font-weight: 800;
+    }
+
+    .pill-income {
+      background-color: #DCFCE7;
+      color: #15803D;
+    }
+
+    .pill-expense {
+      background-color: #FEE2E2;
+      color: #B91C1C;
+    }
+
+    .col-amount {
+      width: 105px;
+      text-align: right;
+      font-weight: 800;
+      font-size: 10.5px;
+      white-space: nowrap;
+    }
+
+    .text-income { color: #10B981; }
+    .text-expense { color: #0F172A; }
+
     .empty-cell, .empty-msg {
       text-align: center;
-      color: #64748B;
-      padding: 12px;
+      color: #94A3B8;
+      padding: 10px;
       font-style: italic;
+      font-size: 9.5px;
     }
 
     .footer {
-      margin-top: 32px;
-      padding-top: 12px;
+      margin-top: 10px;
+      padding-top: 8px;
       border-top: 1px solid #E2E8F0;
-      font-size: 10px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 8.5px;
       color: #94A3B8;
-      text-align: center;
     }
   </style>
 </head>
 <body>
-  <!-- Header -->
-  <div class="report-header">
-    <div>
-      <div class="brand-title">${escapeHtml(APP_CONFIG.NAME)}</div>
-      <div class="brand-subtitle">Estado de Resultados & Auditoría Contable Local (Edge Computing)</div>
+  <!-- Top Hero Banner (Matching App Dashboard) -->
+  <div class="hero-banner">
+    <div class="hero-top-row">
+      <div>
+        <div class="brand-title">ProyectoX</div>
+        <div class="brand-subtitle">Finanzas • Reporte Ejecutivo</div>
+      </div>
+      <div class="hero-meta-right">
+        <div class="sqlite-pill">
+          <span class="sqlite-dot"></span>
+          <span>SQLITE LOCAL</span>
+        </div>
+        <div class="meta-date">Emitido: ${escapeHtml(generatedAt)}</div>
+      </div>
     </div>
-    <div class="meta-info">
-      <div>Fecha de Emisión: ${escapeHtml(generatedAt)}</div>
-      <div>Total Operaciones: ${transactions.length}</div>
+
+    <!-- Liquid Glass Balance Card -->
+    <div class="glass-balance-card">
+      <div>
+        <div class="balance-label">SALDO OPERATIVO DISPONIBLE</div>
+        <div class="balance-amount">${formatCurrency(summary.totalBalance)}</div>
+      </div>
+      <div class="quick-pills-wrap">
+        <div class="quick-pill">
+          <div class="quick-pill-label"><span style="color:#34D399;">+</span> Ingresos (${incomeTransactions.length})</div>
+          <div class="quick-pill-value val-income">+ ${formatCurrency(summary.totalIncome)}</div>
+        </div>
+        <div class="quick-pill">
+          <div class="quick-pill-label"><span style="color:#F87171;">−</span> Gastos (${expenseTransactions.length})</div>
+          <div class="quick-pill-value val-expense">- ${formatCurrency(summary.totalExpense)}</div>
+        </div>
+      </div>
     </div>
   </div>
 
-  <!-- Executive KPI Summary -->
-  <div class="section-title">1. Resumen Ejecutivo de Liquidez</div>
-  <div class="kpi-grid">
-    <div class="kpi-box">
-      <div class="kpi-label">Saldo Operativo Neto</div>
-      <div class="kpi-value text-primary">${formatCurrency(summary.totalBalance)}</div>
+  <!-- Compact Budget Semaphore -->
+  <div class="semaphore-box">
+    <div class="semaphore-header">
+      <span class="semaphore-title">Semáforo de Presupuesto Global</span>
+      <span class="semaphore-pct">
+        ${
+          summary.budgetTotalLimit > 0
+            ? `${globalPct}% consumido (${formatCurrency(summary.budgetTotalSpent)} / ${formatCurrency(summary.budgetTotalLimit)})`
+            : `${globalPct}% consumido`
+        }
+      </span>
     </div>
-    <div class="kpi-box">
-      <div class="kpi-label">Ingresos Acumulados</div>
-      <div class="kpi-value text-income">+${formatCurrency(summary.totalIncome)}</div>
-    </div>
-    <div class="kpi-box">
-      <div class="kpi-label">Egresos Acumulados</div>
-      <div class="kpi-value text-expense">-${formatCurrency(summary.totalExpense)}</div>
+    <div class="progress-track">
+      <div class="progress-fill" style="width: ${globalPct}%; background-color: ${globalBarColor};"></div>
     </div>
   </div>
 
-  <!-- Visual Category Breakdown -->
-  <div class="section-title">2. Distribución Porcentual de Egresos por Categoría</div>
-  <div class="card chart-container">
-    ${categorySvgBarsHtml}
+  <!-- Compact 2-Column Breakdown: Categories + Budgets -->
+  <div class="two-col-grid">
+    <div class="col-half">
+      <div class="panel-title">Gastos por Categoría</div>
+      ${categorySvgBarsHtml}
+    </div>
+    <div class="col-half">
+      <div class="panel-title">Detalle de Presupuestos</div>
+      ${budgetRowsHtml}
+    </div>
   </div>
 
-  <!-- Budget Execution -->
-  <div class="section-title">3. Estado de Ejecución Presupuestaria</div>
-  ${budgetRowsHtml}
-
-  <!-- Summary of Incomes -->
-  <div class="section-title">4. Libro de Ingresos (${incomeTransactions.length})</div>
+  <!-- Unified Compact Transactions Feed -->
+  <div class="section-header-row">
+    <div class="section-title">Transacciones Registradas</div>
+    <div class="section-count">${transactions.length} movimientos en Soles (S/.)</div>
+  </div>
   <table>
     <thead>
       <tr>
+        <th>Transacción / Categoría</th>
         <th>Fecha</th>
-        <th>Categoría</th>
         <th>Billetera</th>
-        <th>Descripción / Notas</th>
-        <th style="text-align: right;">Monto</th>
+        <th>Tipo</th>
+        <th style="text-align: right;">Monto (S/.)</th>
       </tr>
     </thead>
     <tbody>
-      ${renderTableRows(incomeTransactions)}
+      ${renderTransactionRows(transactions)}
     </tbody>
   </table>
 
-  <!-- Intentional Page Break for Formal Expense Ledger -->
-  <div class="page-break-section">
-    <div class="section-title">5. Historial Detallado de Egresos (${expenseTransactions.length})</div>
-    <table>
-      <thead>
-        <tr>
-          <th>Fecha</th>
-          <th>Categoría</th>
-          <th>Billetera</th>
-          <th>Descripción / Notas</th>
-          <th style="text-align: right;">Monto</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${renderTableRows(expenseTransactions)}
-      </tbody>
-    </table>
-  </div>
-
   <div class="footer">
-    Documento generado de forma 100% privada y local en el dispositivo móvil mediante ${escapeHtml(
-      APP_CONFIG.NAME
-    )} (Motor SQLite + CSS Paged Media).
+    <span>${escapeHtml(APP_CONFIG.NAME)} • Motor Offline-First (SQLite + PowerSync)</span>
+    <span>Moneda: Soles Peruanos (S/. PEN) • Paginación A4 Compacta</span>
   </div>
 </body>
 </html>

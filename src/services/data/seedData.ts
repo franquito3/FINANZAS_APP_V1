@@ -2,24 +2,24 @@ import { db } from '../../db/powersync';
 import { deterministicId, LOCAL_DEMO_USER_ID } from '../../utils/id';
 
 export const DEFAULT_CATEGORIES = [
-  { key: 'food', name: 'Comida', icon_identifier: '🍔', color_hex: '#EF4444', type: 'EGRESO' },
-  { key: 'transport', name: 'Transporte', icon_identifier: '🚗', color_hex: '#F59E0B', type: 'EGRESO' },
+  { key: 'shopping', name: 'Shopping', icon_identifier: '🛒', color_hex: '#8B5CF6', type: 'EGRESO' },
+  { key: 'food', name: 'Food', icon_identifier: '🍴', color_hex: '#F59E0B', type: 'EGRESO' },
+  { key: 'transport', name: 'Transporte', icon_identifier: '🚗', color_hex: '#10B981', type: 'EGRESO' },
   { key: 'housing', name: 'Vivienda', icon_identifier: '🏠', color_hex: '#3B82F6', type: 'EGRESO' },
-  { key: 'health', name: 'Salud', icon_identifier: '💊', color_hex: '#10B981', type: 'EGRESO' },
-  { key: 'fun', name: 'Ocio', icon_identifier: '🎬', color_hex: '#8B5CF6', type: 'EGRESO' },
-  { key: 'shopping', name: 'Compras', icon_identifier: '🛍️', color_hex: '#EC4899', type: 'EGRESO' },
+  { key: 'health', name: 'Salud', icon_identifier: '💊', color_hex: '#EC4899', type: 'EGRESO' },
+  { key: 'fun', name: 'Ocio', icon_identifier: '🎬', color_hex: '#6366F1', type: 'EGRESO' },
   { key: 'salary', name: 'Sueldo', icon_identifier: '💼', color_hex: '#10B981', type: 'INGRESO' },
   { key: 'freelance', name: 'Freelance', icon_identifier: '🚀', color_hex: '#F97316', type: 'INGRESO' },
   { key: 'invest', name: 'Inversión', icon_identifier: '📈', color_hex: '#06B6D4', type: 'INGRESO' },
 ] as const;
 
 export const DEFAULT_WALLETS = [
-  { key: 'cash', name: 'Efectivo', currency_code: 'USD' },
-  { key: 'bank', name: 'Cuenta Banco', currency_code: 'USD' },
+  { key: 'cash', name: 'Efectivo', currency_code: 'PEN' },
+  { key: 'bank', name: 'Cuenta Banco', currency_code: 'PEN' },
 ] as const;
 
 /**
- * Seeds default categories, wallets and a sample budget.
+ * Seeds default categories, wallets and a sample budget in PEN (S/.).
  *
  * Uses deterministic UUIDs (SHA-256 of userId + key) so that if the same user
  * signs in on multiple devices, the seeded rows produce the exact same UUIDs
@@ -50,6 +50,9 @@ export async function seedLocalDefaults(userId: string = LOCAL_DEMO_USER_ID): Pr
         ]);
       });
     }
+
+    // Ensure any previously seeded USD default wallets use PEN
+    await db.execute("UPDATE wallets SET currency_code = 'PEN' WHERE currency_code = 'USD'");
 
     const existingCats = await db.getOptional<{ id: string }>(
       'SELECT id FROM categories LIMIT 1'
@@ -112,7 +115,7 @@ export async function seedLocalDefaults(userId: string = LOCAL_DEMO_USER_ID): Pr
         await tx.execute(
           `INSERT OR IGNORE INTO budgets (id, user_id, category_id, limit_amount, period, start_date, created_at, updated_at)
            VALUES (?, ?, ?, ?, 'MONTHLY', ?, ?, ?)`,
-          [budgetId, effectiveUserId, targetFoodCat, 500, now, now, now]
+          [budgetId, effectiveUserId, targetFoodCat, 1500, now, now, now]
         );
       }
     });

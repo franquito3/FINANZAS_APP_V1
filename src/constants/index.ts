@@ -1,13 +1,19 @@
 export const APP_CONFIG = {
   NAME: 'ProyectoX Finanzas',
   SCHEME: 'proyectox',
-  DEFAULT_CURRENCY: 'USD',
+  DEFAULT_CURRENCY: 'PEN',
+  CURRENCY_SYMBOL: 'S/.',
 } as const;
 
 export const THEME = {
   colors: {
-    primary: '#1E40AF',
-    primaryLight: '#3B82F6',
+    primary: '#3B28CC',
+    primaryLight: '#6366F1',
+    accentPurple: '#8B5CF6',
+    accentCyan: '#38BDF8',
+    gradientStart: '#080E2C',
+    gradientMid: '#1B1F6A',
+    gradientEnd: '#3B1877',
     background: '#F8FAFC',
     card: '#FFFFFF',
     textPrimary: '#0F172A',

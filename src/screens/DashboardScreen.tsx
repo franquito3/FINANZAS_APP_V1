@@ -3,18 +3,18 @@ import {
   StyleSheet,
   View,
   ScrollView,
-  TouchableOpacity,
   Text,
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
-import { DashboardMetrics } from '../components/DashboardMetrics';
+import { DashboardMetrics, CompactBudgetSemaphore } from '../components/DashboardMetrics';
 import { TransactionList } from '../components/TransactionList';
 import { TransactionModal } from '../components/TransactionModal';
 import { financeService } from '../services/data/financeService';
 import { seedLocalDefaults } from '../services/data/seedData';
-import { DashboardSummary, Transaction, Wallet } from '../types';
+import { DashboardSummary, Transaction, TransactionType, Wallet } from '../types';
 import { THEME } from '../constants';
 import { initLocalDatabase } from '../db/powersync';
 import { useSyncStatus } from '../hooks/useSyncStatus';
@@ -36,6 +36,7 @@ export const DashboardScreen: React.FC = () => {
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [selectedWalletId, setSelectedWalletId] = useState<string>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalInitialType, setModalInitialType] = useState<TransactionType>('EGRESO');
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -68,138 +69,162 @@ export const DashboardScreen: React.FC = () => {
   }, [loadData]);
 
   const handleRefresh = () => {
+    Haptics.selectionAsync();
     setIsRefreshing(true);
     loadData();
   };
 
-  const handleOpenModal = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  const handleQuickAction = (type: TransactionType) => {
+    setModalInitialType(type);
     setIsModalOpen(true);
   };
 
   const handleDelete = async (id: string) => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     await financeService.deleteTransaction(id);
     loadData();
   };
 
   if (isLoading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={THEME.colors.primary} />
-      </View>
+      <LinearGradient
+        colors={['#070D2D', '#161D65', '#351875']}
+        style={styles.center}
+      >
+        <ActivityIndicator size="large" color="#38BDF8" />
+      </LinearGradient>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <LinearGradient
+      colors={['#070D2D', '#161D65', '#351875']}
+      start={{ x: 0.1, y: 0 }}
+      end={{ x: 0.9, y: 0.55 }}
+      style={styles.container}
+    >
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor="#FFFFFF"
+            colors={[THEME.colors.primary]}
+          />
         }
       >
-        {/* Top Header & Connection Pill */}
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.appTitle}>Panel de Control</Text>
-            <Text style={styles.appSubtitle}>Rastreo Transaccional de Alta Velocidad</Text>
+        {/* Top Hero Area (Dark Gradient + Glass Card) */}
+        <View style={styles.heroSection}>
+          <View style={styles.header}>
+            <View>
+              <Text style={styles.brandTitle}>ProyectoX</Text>
+              <Text style={styles.brandSubtitle}>Finanzas</Text>
+            </View>
+
+            <View style={styles.statusPill}>
+              <View
+                style={[
+                  styles.dot,
+                  {
+                    backgroundColor: syncStatus.connected
+                      ? '#10B981'
+                      : '#10B981',
+                  },
+                ]}
+              />
+              <Text style={styles.statusPillText}>
+                {syncStatus.connected ? 'CLOUD' : 'SQLITE'}
+              </Text>
+            </View>
           </View>
 
-          <View style={styles.statusPill}>
-            <View
-              style={[
-                styles.dot,
-                {
-                  backgroundColor: syncStatus.connected
-                    ? THEME.colors.success
-                    : THEME.colors.primaryLight,
-                },
-              ]}
-            />
-            <Text style={styles.statusPillText}>
-              {syncStatus.connected ? 'Nube' : 'SQLite'}
-            </Text>
-          </View>
+          {/* Liquid Glass Balance Card with + Ingreso & - Gasto */}
+          <DashboardMetrics
+            summary={summary}
+            wallets={wallets}
+            selectedWalletId={selectedWalletId}
+            onSelectWallet={setSelectedWalletId}
+            onQuickAction={handleQuickAction}
+          />
         </View>
 
-        {/* Dashboard Financial Metrics Card */}
-        <DashboardMetrics
-          summary={summary}
-          wallets={wallets}
-          selectedWalletId={selectedWalletId}
-          onSelectWallet={setSelectedWalletId}
-        />
+        {/* Bottom White Sheet (borderTopRadius: 32) */}
+        <View style={styles.bottomSheet}>
+          <View style={styles.sheetHandle} />
 
-        {/* Recent Transactions List */}
-        <TransactionList
-          transactions={transactions}
-          onDeleteTransaction={handleDelete}
-        />
+          {/* Compact Budget Semaphore */}
+          <CompactBudgetSemaphore summary={summary} />
+
+          {/* Recent Transactions Feed */}
+          <TransactionList
+            transactions={transactions}
+            onDeleteTransaction={handleDelete}
+          />
+        </View>
       </ScrollView>
-
-      {/* Omnipresent Floating Action Button (FAB) */}
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={handleOpenModal}
-        activeOpacity={0.85}
-      >
-        <Text style={styles.fabIcon}>+</Text>
-      </TouchableOpacity>
 
       {/* Fast Data Entry Transaction Modal */}
       <TransactionModal
         visible={isModalOpen}
+        initialType={modalInitialType}
         onClose={() => setIsModalOpen(false)}
         onSuccess={loadData}
         wallets={wallets}
       />
-    </View>
+    </LinearGradient>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: THEME.colors.background,
   },
   center: {
     flex: 1,
-    backgroundColor: THEME.colors.background,
     justifyContent: 'center',
     alignItems: 'center',
   },
   scrollContent: {
-    padding: 20,
-    paddingBottom: 100,
+    flexGrow: 1,
+  },
+  heroSection: {
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 8,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
+    alignItems: 'flex-start',
+    marginBottom: 18,
   },
-  appTitle: {
-    fontSize: 22,
+  brandTitle: {
+    fontSize: 24,
     fontWeight: '800',
-    color: THEME.colors.textPrimary,
+    color: '#FFFFFF',
+    letterSpacing: -0.4,
+    lineHeight: 28,
   },
-  appSubtitle: {
-    fontSize: 12,
-    color: THEME.colors.textSecondary,
-    marginTop: 2,
+  brandSubtitle: {
+    fontSize: 21,
+    fontWeight: '400',
+    color: 'rgba(255, 255, 255, 0.88)',
+    letterSpacing: -0.2,
+    lineHeight: 25,
   },
   statusPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: THEME.colors.card,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
     borderWidth: 1,
-    borderColor: THEME.colors.border,
+    borderColor: 'rgba(255, 255, 255, 0.16)',
+    marginTop: 2,
   },
   dot: {
     width: 7,
@@ -208,31 +233,31 @@ const styles = StyleSheet.create({
   },
   statusPillText: {
     fontSize: 11,
-    fontWeight: '700',
-    color: THEME.colors.textSecondary,
-    textTransform: 'uppercase',
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.6,
   },
-  fab: {
-    position: 'absolute',
-    bottom: 24,
+  bottomSheet: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 32,
+    minHeight: 420,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  sheetHandle: {
+    width: 38,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#E2E8F0',
     alignSelf: 'center',
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: THEME.colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: THEME.colors.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    elevation: 8,
-  },
-  fabIcon: {
-    color: '#fff',
-    fontSize: 34,
-    fontWeight: '400',
-    lineHeight: 38,
-    textAlign: 'center',
+    marginBottom: 14,
   },
 });

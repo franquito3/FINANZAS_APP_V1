@@ -1,21 +1,33 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
 import { Text } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { THEME } from '../../constants';
 
 export default function TabsLayout() {
   return (
     <Tabs
+      screenListeners={{
+        tabPress: () => {
+          Haptics.selectionAsync();
+        },
+      }}
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: THEME.colors.primary,
-        tabBarInactiveTintColor: THEME.colors.textSecondary,
+        tabBarInactiveTintColor: '#94A3B8',
         tabBarStyle: {
-          backgroundColor: THEME.colors.card,
-          borderTopColor: THEME.colors.border,
-          height: 62,
-          paddingBottom: 8,
-          paddingTop: 6,
+          backgroundColor: '#FFFFFF',
+          borderTopColor: '#F1F5F9',
+          borderTopWidth: 1,
+          height: 64,
+          paddingBottom: 9,
+          paddingTop: 7,
+          elevation: 12,
+          shadowColor: '#0F172A',
+          shadowOffset: { width: 0, height: -3 },
+          shadowOpacity: 0.06,
+          shadowRadius: 8,
         },
         tabBarLabelStyle: {
           fontSize: 11,

@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS public.wallets (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
-  currency_code VARCHAR(5) NOT NULL DEFAULT 'USD',
+  currency_code VARCHAR(5) NOT NULL DEFAULT 'PEN',
   is_active BOOLEAN NOT NULL DEFAULT true,
   created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())

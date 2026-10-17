@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
-import { DashboardSummary, Wallet } from '../types';
-import { THEME } from '../constants';
+import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
+import * as Haptics from 'expo-haptics';
+import { DashboardSummary, TransactionType, Wallet } from '../types';
 import { formatCurrency } from '../utils';
 
 interface Props {
@@ -9,6 +11,7 @@ interface Props {
   wallets: Wallet[];
   selectedWalletId: string;
   onSelectWallet: (id: string) => void;
+  onQuickAction: (type: TransactionType) => void;
 }
 
 export const DashboardMetrics: React.FC<Props> = ({
@@ -16,82 +19,149 @@ export const DashboardMetrics: React.FC<Props> = ({
   wallets,
   selectedWalletId,
   onSelectWallet,
+  onQuickAction,
 }) => {
-  // Budget semaphore: Green (<70%), Yellow (70-90%), Red (>90%)
-  const getBudgetStatusColor = (percentage: number) => {
-    if (percentage >= 90) return THEME.colors.danger;
-    if (percentage >= 70) return '#F59E0B';
-    return THEME.colors.success;
+  const [hideBalance, setHideBalance] = useState(false);
+
+  const toggleVisibility = () => {
+    Haptics.selectionAsync();
+    setHideBalance((prev) => !prev);
   };
 
-  const budgetColor = getBudgetStatusColor(summary.budgetPercentage);
+  const handleWalletPress = (id: string) => {
+    Haptics.selectionAsync();
+    onSelectWallet(id);
+  };
+
+  const handleActionPress = (type: TransactionType) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    onQuickAction(type);
+  };
 
   return (
     <View style={styles.container}>
-      {/* Wallet selector pills */}
-      <View style={styles.walletPills}>
-        <TouchableOpacity
-          style={[styles.pill, selectedWalletId === 'all' && styles.pillActive]}
-          onPress={() => onSelectWallet('all')}
-        >
-          <Text style={[styles.pillText, selectedWalletId === 'all' && styles.pillTextActive]}>
-            Todas
-          </Text>
-        </TouchableOpacity>
-        {wallets.map((w) => (
+      {/* Optional subtle wallet filter pills */}
+      {wallets.length > 1 && (
+        <View style={styles.walletPills}>
           <TouchableOpacity
-            key={w.id}
-            style={[styles.pill, selectedWalletId === w.id && styles.pillActive]}
-            onPress={() => onSelectWallet(w.id)}
+            style={[styles.pill, selectedWalletId === 'all' && styles.pillActive]}
+            onPress={() => handleWalletPress('all')}
+            activeOpacity={0.75}
           >
-            <Text style={[styles.pillText, selectedWalletId === w.id && styles.pillTextActive]}>
-              {w.name}
+            <Text style={[styles.pillText, selectedWalletId === 'all' && styles.pillTextActive]}>
+              Todas
             </Text>
           </TouchableOpacity>
-        ))}
+          {wallets.map((w) => (
+            <TouchableOpacity
+              key={w.id}
+              style={[styles.pill, selectedWalletId === w.id && styles.pillActive]}
+              onPress={() => handleWalletPress(w.id)}
+              activeOpacity={0.75}
+            >
+              <Text style={[styles.pillText, selectedWalletId === w.id && styles.pillTextActive]}>
+                {w.name}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      {/* Liquid Glass Balance Card with Neon Rim */}
+      <View style={styles.glowShadowWrap}>
+        <LinearGradient
+          colors={['rgba(56, 189, 248, 0.85)', 'rgba(139, 92, 246, 0.65)', 'rgba(192, 132, 252, 0.9)']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.gradientBorder}
+        >
+          <BlurView intensity={48} tint="dark" style={styles.blurCard}>
+            <Text style={styles.balanceLabel}>SALDO OPERATIVO DISPONIBLE</Text>
+
+            <View style={styles.balanceRow}>
+              <Text
+                style={styles.balanceValue}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+              >
+                {hideBalance ? 'S/. ••••••' : formatCurrency(summary.totalBalance)}
+              </Text>
+
+              <TouchableOpacity
+                onPress={toggleVisibility}
+                style={styles.eyeButton}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.eyeIcon}>{hideBalance ? '👁️' : '◡'}</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Dual Action Buttons Inside Glass Card */}
+            <View style={styles.actionsRow}>
+              <TouchableOpacity
+                style={styles.glassBtn}
+                onPress={() => handleActionPress('INGRESO')}
+                activeOpacity={0.75}
+              >
+                <LinearGradient
+                  colors={['rgba(255, 255, 255, 0.20)', 'rgba(255, 255, 255, 0.07)']}
+                  style={styles.glassBtnInner}
+                >
+                  <Text style={styles.glassBtnSymbol}>＋</Text>
+                  <Text style={styles.glassBtnText}>Ingreso</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.glassBtn}
+                onPress={() => handleActionPress('EGRESO')}
+                activeOpacity={0.75}
+              >
+                <LinearGradient
+                  colors={['rgba(255, 255, 255, 0.20)', 'rgba(255, 255, 255, 0.07)']}
+                  style={styles.glassBtnInner}
+                >
+                  <Text style={styles.glassBtnSymbol}>－</Text>
+                  <Text style={styles.glassBtnText}>Gasto</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </BlurView>
+        </LinearGradient>
+      </View>
+    </View>
+  );
+};
+
+/**
+ * Compact Budget Semaphore Card rendered inside the white bottom sheet
+ */
+export const CompactBudgetSemaphore: React.FC<{ summary: DashboardSummary }> = ({ summary }) => {
+  const pct = summary.budgetPercentage;
+  const barColor = pct >= 90 ? '#EF4444' : pct >= 70 ? '#F59E0B' : '#4338CA';
+
+  return (
+    <View style={styles.semaphoreCard}>
+      <View style={styles.semaphoreHeader}>
+        <Text style={styles.semaphoreTitle}>Semáforo de Presupuesto</Text>
+        <View style={styles.semaphoreRight}>
+          <Text style={styles.semaphorePercent}>{pct}%</Text>
+          <View style={styles.semaphoreBadge}>
+            <View style={[styles.semaphoreSegment, { backgroundColor: '#10B981' }]} />
+            <View style={[styles.semaphoreSegment, { backgroundColor: '#F59E0B' }]} />
+            <View style={[styles.semaphoreSegment, { backgroundColor: '#EF4444' }]} />
+          </View>
+        </View>
       </View>
 
-      {/* Main Balance Card */}
-      <View style={styles.balanceCard}>
-        <Text style={styles.balanceLabel}>Saldo Operativo Disponible</Text>
-        <Text style={styles.balanceValue}>{formatCurrency(summary.totalBalance)}</Text>
-
-        <View style={styles.incomeExpenseRow}>
-          <View style={styles.statBox}>
-            <Text style={styles.statLabel}>Ingresos</Text>
-            <Text style={[styles.statValue, styles.incomeText]}>
-              +{formatCurrency(summary.totalIncome)}
-            </Text>
-          </View>
-          <View style={styles.divider} />
-          <View style={styles.statBox}>
-            <Text style={styles.statLabel}>Gastos</Text>
-            <Text style={[styles.statValue, styles.expenseText]}>
-              -{formatCurrency(summary.totalExpense)}
-            </Text>
-          </View>
-        </View>
-
-        {/* Budget Semaphore Progress Bar */}
-        <View style={styles.budgetSection}>
-          <View style={styles.budgetHeader}>
-            <Text style={styles.budgetLabel}>Semáforo de Presupuesto</Text>
-            <Text style={[styles.budgetPercent, { color: budgetColor }]}>
-              {summary.budgetPercentage}% consumido
-            </Text>
-          </View>
-          <View style={styles.progressBarBackground}>
-            <View
-              style={[
-                styles.progressBarFill,
-                { width: `${summary.budgetPercentage}%`, backgroundColor: budgetColor },
-              ]}
-            />
-          </View>
-          <Text style={styles.budgetSubtext}>
-            {formatCurrency(summary.budgetTotalSpent)} de {formatCurrency(summary.budgetTotalLimit)}
-          </Text>
-        </View>
+      <View style={styles.progressTrack}>
+        <LinearGradient
+          colors={pct >= 90 ? ['#EF4444', '#DC2626'] : ['#312E81', barColor]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={[styles.progressFill, { width: `${Math.max(pct, 4)}%` }]}
+        />
       </View>
     </View>
   );
@@ -105,114 +175,167 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
     flexWrap: 'wrap',
+    marginBottom: 2,
   },
   pill: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 20,
-    backgroundColor: '#E2E8F0',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.18)',
   },
   pillActive: {
-    backgroundColor: THEME.colors.primary,
+    backgroundColor: 'rgba(255, 255, 255, 0.28)',
+    borderColor: 'rgba(255, 255, 255, 0.55)',
   },
   pillText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
-    color: THEME.colors.textSecondary,
+    color: 'rgba(255, 255, 255, 0.72)',
   },
   pillTextActive: {
-    color: '#fff',
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
-  balanceCard: {
-    backgroundColor: THEME.colors.card,
-    borderRadius: 20,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: THEME.colors.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    elevation: 3,
+  glowShadowWrap: {
+    borderRadius: 26,
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.45,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  gradientBorder: {
+    borderRadius: 26,
+    padding: 1.5,
+  },
+  blurCard: {
+    borderRadius: 24.5,
+    paddingVertical: 22,
+    paddingHorizontal: 20,
+    backgroundColor: 'rgba(20, 24, 78, 0.58)',
+    alignItems: 'center',
+    overflow: 'hidden',
   },
   balanceLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: THEME.colors.textSecondary,
+    fontSize: 11,
+    fontWeight: '700',
+    color: 'rgba(226, 232, 240, 0.85)',
+    letterSpacing: 1.1,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  balanceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    marginBottom: 20,
   },
   balanceValue: {
-    fontSize: 32,
-    fontWeight: '900',
-    color: THEME.colors.textPrimary,
-    marginVertical: 8,
+    fontSize: 34,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.3,
   },
-  incomeExpenseRow: {
-    flexDirection: 'row',
-    marginTop: 8,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: THEME.colors.border,
-  },
-  statBox: {
-    flex: 1,
+  eyeButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  divider: {
-    width: 1,
-    backgroundColor: THEME.colors.border,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: THEME.colors.textSecondary,
-  },
-  statValue: {
-    fontSize: 16,
+  eyeIcon: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.85)',
     fontWeight: '700',
-    marginTop: 2,
   },
-  incomeText: {
-    color: THEME.colors.success,
+  actionsRow: {
+    flexDirection: 'row',
+    gap: 14,
+    width: '100%',
   },
-  expenseText: {
-    color: THEME.colors.danger,
+  glassBtn: {
+    flex: 1,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.32)',
+    overflow: 'hidden',
   },
-  budgetSection: {
-    marginTop: 16,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: THEME.colors.border,
+  glassBtnInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 11,
+    paddingHorizontal: 16,
+    gap: 6,
   },
-  budgetHeader: {
+  glassBtnSymbol: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  glassBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
+  semaphoreCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: '#EEF2FF',
+    shadowColor: '#1E1B4B',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 2,
+    marginBottom: 18,
+  },
+  semaphoreHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: 10,
   },
-  budgetLabel: {
-    fontSize: 12,
+  semaphoreTitle: {
+    fontSize: 13.5,
     fontWeight: '600',
-    color: THEME.colors.textSecondary,
+    color: '#1E293B',
   },
-  budgetPercent: {
-    fontSize: 12,
+  semaphoreRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  semaphorePercent: {
+    fontSize: 13.5,
     fontWeight: '700',
+    color: '#0F172A',
   },
-  progressBarBackground: {
-    height: 8,
+  semaphoreBadge: {
+    flexDirection: 'row',
     borderRadius: 4,
+    overflow: 'hidden',
+    width: 18,
+    height: 11,
+  },
+  semaphoreSegment: {
+    flex: 1,
+  },
+  progressTrack: {
+    height: 6,
+    borderRadius: 3,
     backgroundColor: '#E2E8F0',
     overflow: 'hidden',
   },
-  progressBarFill: {
+  progressFill: {
     height: '100%',
-    borderRadius: 4,
-  },
-  budgetSubtext: {
-    fontSize: 11,
-    color: THEME.colors.textSecondary,
-    marginTop: 4,
-    textAlign: 'right',
+    borderRadius: 3,
   },
 });

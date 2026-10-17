@@ -49,11 +49,11 @@ export const ReportsScreen: React.FC = () => {
   useTableChanges(['transactions', 'budgets'], loadMetrics);
 
   const handleExportCSV = async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setIsExportingCsv(true);
     try {
       const result = await exportTransactionsToCSV();
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Haptics.selectionAsync();
       setLastReportInfo(
         `CSV generado (${result.rowCount} filas) • ${new Date().toLocaleTimeString()}`
       );
@@ -65,11 +65,11 @@ export const ReportsScreen: React.FC = () => {
   };
 
   const handleGeneratePDF = async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setIsGeneratingPdf(true);
     try {
       await generateAndSharePDFReport();
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Haptics.selectionAsync();
       setLastReportInfo(`PDF A4 generado con éxito • ${new Date().toLocaleTimeString()}`);
     } catch (err: any) {
       Alert.alert('Error al generar PDF', err.message || String(err));

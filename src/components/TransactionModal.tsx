@@ -18,6 +18,7 @@ import { LOCAL_DEMO_USER_ID } from '../utils/id';
 
 interface Props {
   visible: boolean;
+  initialType?: TransactionType;
   onClose: () => void;
   onSuccess: () => void;
   wallets: Wallet[];
@@ -25,12 +26,13 @@ interface Props {
 
 export const TransactionModal: React.FC<Props> = ({
   visible,
+  initialType = 'EGRESO',
   onClose,
   onSuccess,
   wallets,
 }) => {
   const { user } = useAuth();
-  const [type, setType] = useState<TransactionType>('EGRESO');
+  const [type, setType] = useState<TransactionType>(initialType);
   const [amountStr, setAmountStr] = useState('0');
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
@@ -40,14 +42,21 @@ export const TransactionModal: React.FC<Props> = ({
 
   useEffect(() => {
     if (visible) {
+      setType(initialType);
       setAmountStr('0');
       setNotes('');
-      loadCategories(type);
+      loadCategories(initialType);
       if (wallets.length > 0 && !selectedWalletId) {
         setSelectedWalletId(wallets[0].id);
       }
     }
-  }, [visible, type, wallets]);
+  }, [visible, initialType, wallets]);
+
+  useEffect(() => {
+    if (visible) {
+      loadCategories(type);
+    }
+  }, [type]);
 
   const loadCategories = async (txType: TransactionType) => {
     try {
@@ -62,7 +71,7 @@ export const TransactionModal: React.FC<Props> = ({
   };
 
   const handleKeyPress = (val: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Haptics.selectionAsync();
 
     if (val === '⌫') {
       if (amountStr.length <= 1) {
@@ -184,7 +193,7 @@ export const TransactionModal: React.FC<Props> = ({
 
           {/* Amount Display */}
           <View style={styles.amountDisplay}>
-            <Text style={styles.currencyPrefix}>$</Text>
+            <Text style={styles.currencyPrefix}>S/.</Text>
             <Text
               style={[
                 styles.amountValue,
@@ -214,7 +223,7 @@ export const TransactionModal: React.FC<Props> = ({
                       },
                     ]}
                     onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      Haptics.selectionAsync();
                       setSelectedCategoryId(cat.id);
                     }}
                   >

@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   email TEXT,
   full_name TEXT,
   avatar_url TEXT,
-  default_currency VARCHAR(5) DEFAULT 'USD' NOT NULL,
+  default_currency VARCHAR(5) DEFAULT 'PEN' NOT NULL,
   created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
   updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );

@@ -3,13 +3,17 @@
  */
 export * from './id';
 
-export function formatCurrency(amount: number, currency: string = 'USD'): string {
-  try {
-    return new Intl.NumberFormat('es-PE', {
-      style: 'currency',
-      currency,
-    }).format(amount);
-  } catch {
-    return `${currency} ${amount.toFixed(2)}`;
-  }
+/**
+ * Formats an amount in Soles (S/. 15,123.45) by default
+ */
+export function formatCurrency(amount: number, currency: string = 'PEN'): string {
+  const numeric = Number.isFinite(amount) ? amount : 0;
+  const absFormatted = Math.abs(numeric).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
+  const prefix = currency === 'PEN' || currency === 'S/.' ? 'S/.' : currency;
+  const sign = numeric < 0 ? '- ' : '';
+  return `${sign}${prefix} ${absFormatted}`;
 }
