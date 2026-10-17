@@ -7,7 +7,10 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  Platform,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { THEME } from '../constants';
 import { financeService } from '../services/data/financeService';
@@ -79,262 +82,401 @@ export const ReportsScreen: React.FC = () => {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-      <View style={styles.header}>
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>Fase 5: Soberanía de Datos Local</Text>
-        </View>
-        <Text style={styles.title}>Reportes y Exportación</Text>
-        <Text style={styles.subtitle}>
-          Procesamiento 100% en el dispositivo móvil (Edge Computing) sin costos de servidor
-        </Text>
-      </View>
+    <LinearGradient
+      colors={['#070D2D', '#161D65', '#351875']}
+      start={{ x: 0.1, y: 0 }}
+      end={{ x: 0.9, y: 0.55 }}
+      style={styles.container}
+    >
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Top Hero Area */}
+        <View style={styles.heroSection}>
+          <View style={styles.header}>
+            <View>
+              <Text style={styles.brandTitle}>ProyectoX</Text>
+              <Text style={styles.brandSubtitle}>Reportes</Text>
+            </View>
 
-      {/* Consolidated Data Preview */}
-      <View style={styles.summaryCard}>
-        <Text style={styles.cardSectionTitle}>Datos Disponibles en SQLite Local</Text>
-        <View style={styles.statsGrid}>
-          <View style={styles.statItem}>
-            <Text style={styles.statLabel}>Operaciones</Text>
-            <Text style={styles.statValue}>{txCount} registros</Text>
+            <View style={styles.statusPill}>
+              <View style={styles.dot} />
+              <Text style={styles.statusPillText}>EDGE A4</Text>
+            </View>
           </View>
-          <View style={styles.statItem}>
-            <Text style={styles.statLabel}>Balance Neto</Text>
-            <Text style={[styles.statValue, { color: THEME.colors.primary }]}>
-              {formatCurrency(summary.totalBalance)}
-            </Text>
+
+          {/* Liquid Glass Summary Card */}
+          <View style={styles.outerGlowWrapper}>
+            <LinearGradient
+              colors={[
+                'rgba(56, 189, 248, 0.75)',
+                'rgba(139, 92, 246, 0.45)',
+                'rgba(56, 189, 248, 0.65)',
+              ]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.gradientBorder}
+            >
+              <BlurView
+                intensity={Platform.OS === 'ios' ? 42 : 65}
+                tint="dark"
+                style={styles.blurContainer}
+              >
+                <LinearGradient
+                  colors={[
+                    'rgba(255, 255, 255, 0.14)',
+                    'rgba(30, 41, 59, 0.38)',
+                    'rgba(15, 23, 42, 0.52)',
+                  ]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.innerGlass}
+                >
+                  <View style={styles.glassTopRow}>
+                    <Text style={styles.glassLabel}>BALANCE NETO AUDITADO</Text>
+                    <View style={styles.opsBadge}>
+                      <Text style={styles.opsBadgeText}>{txCount} registros</Text>
+                    </View>
+                  </View>
+
+                  <Text
+                    style={styles.balanceText}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                  >
+                    {formatCurrency(summary.totalBalance)}
+                  </Text>
+
+                  <View style={styles.metricsRow}>
+                    <View style={styles.metricPill}>
+                      <Text style={styles.metricPillLabel}>+ Ingresos</Text>
+                      <Text style={[styles.metricPillVal, { color: '#34D399' }]}>
+                        +{formatCurrency(summary.totalIncome)}
+                      </Text>
+                    </View>
+                    <View style={styles.metricPill}>
+                      <Text style={styles.metricPillLabel}>− Egresos</Text>
+                      <Text style={[styles.metricPillVal, { color: '#F87171' }]}>
+                        -{formatCurrency(summary.totalExpense)}
+                      </Text>
+                    </View>
+                  </View>
+                </LinearGradient>
+              </BlurView>
+            </LinearGradient>
           </View>
         </View>
-        <View style={styles.statsGrid}>
-          <View style={styles.statItem}>
-            <Text style={styles.statLabel}>Total Ingresos</Text>
-            <Text style={[styles.statValue, { color: THEME.colors.success }]}>
-              +{formatCurrency(summary.totalIncome)}
-            </Text>
-          </View>
-          <View style={styles.statItem}>
-            <Text style={styles.statLabel}>Total Egresos</Text>
-            <Text style={[styles.statValue, { color: THEME.colors.danger }]}>
-              -{formatCurrency(summary.totalExpense)}
-            </Text>
-          </View>
-        </View>
-      </View>
 
-      {/* CSV Export Card */}
-      <View style={styles.exportCard}>
-        <View style={styles.cardHeaderRow}>
-          <View style={[styles.iconBadge, { backgroundColor: '#DCFCE7' }]}>
-            <Text style={styles.iconEmoji}>📊</Text>
-          </View>
-          <View style={styles.cardTitleWrap}>
-            <Text style={styles.exportTitle}>Exportación Tabular (Excel / CSV)</Text>
-            <Text style={styles.exportTech}>Motor PapaParse • Estándar RFC 4180</Text>
-          </View>
-        </View>
+        {/* Bottom White Sheet (borderTopRadius: 32) */}
+        <View style={styles.bottomSheet}>
+          <View style={styles.sheetHandle} />
 
-        <Text style={styles.exportDesc}>
-          Extrae todas tus transacciones de SQLite y las serializa con escapado automático de comillas dobles, saltos de línea en notas y encabezado UTF-8 BOM para apertura directa en Microsoft Excel o Google Sheets.
-        </Text>
+          <Text style={styles.sheetSectionTitle}>Exportación Local (Sin Servidor)</Text>
 
-        <TouchableOpacity
-          style={[styles.exportBtn, styles.csvBtn]}
-          onPress={handleExportCSV}
-          disabled={isExportingCsv || isGeneratingPdf}
-        >
-          {isExportingCsv ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.exportBtnText}>⬇ Exportar Libro Contable (.CSV)</Text>
+          {lastReportInfo && (
+            <View style={styles.feedbackBanner}>
+              <Text style={styles.feedbackText}>✓ {lastReportInfo}</Text>
+            </View>
           )}
-        </TouchableOpacity>
-      </View>
 
-      {/* PDF Export Card */}
-      <View style={styles.exportCard}>
-        <View style={styles.cardHeaderRow}>
-          <View style={[styles.iconBadge, { backgroundColor: '#DBEAFE' }]}>
-            <Text style={styles.iconEmoji}>📄</Text>
+          {/* PDF Export Card */}
+          <View style={styles.exportCard}>
+            <View style={styles.cardHeaderRow}>
+              <View style={[styles.iconAvatar, { backgroundColor: '#2563EB' }]}>
+                <Text style={styles.iconEmoji}>📄</Text>
+              </View>
+              <View style={styles.cardTitleWrap}>
+                <Text style={styles.exportTitle}>Reporte Ejecutivo Impreso (.PDF)</Text>
+                <Text style={styles.exportTech}>Diseño Liquid Glass • Formato A4 Compacto</Text>
+              </View>
+            </View>
+
+            <Text style={styles.exportDesc}>
+              Genera un documento formal A4 en Soles (S/.) con el resumen ejecutivo, semáforo de presupuesto, gráficos por categoría y tabla detallada de movimientos lista para imprimir o compartir.
+            </Text>
+
+            <TouchableOpacity
+              style={[styles.exportBtn, styles.pdfBtn]}
+              onPress={handleGeneratePDF}
+              disabled={isGeneratingPdf || isExportingCsv}
+              activeOpacity={0.8}
+            >
+              {isGeneratingPdf ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.exportBtnText}>🖨️ Generar y Compartir PDF</Text>
+              )}
+            </TouchableOpacity>
           </View>
-          <View style={styles.cardTitleWrap}>
-            <Text style={styles.exportTitle}>Reporte Ejecutivo Impreso (PDF)</Text>
-            <Text style={styles.exportTech}>expo-print • CSS Paged Media A4</Text>
+
+          {/* CSV Export Card */}
+          <View style={styles.exportCard}>
+            <View style={styles.cardHeaderRow}>
+              <View style={[styles.iconAvatar, { backgroundColor: '#10B981' }]}>
+                <Text style={styles.iconEmoji}>📊</Text>
+              </View>
+              <View style={styles.cardTitleWrap}>
+                <Text style={styles.exportTitle}>Libro Contable Excel (.CSV)</Text>
+                <Text style={styles.exportTech}>Motor PapaParse • Estándar RFC 4180 UTF-8</Text>
+              </View>
+            </View>
+
+            <Text style={styles.exportDesc}>
+              Extrae todas tus transacciones de SQLite con codificación UTF-8 BOM para apertura directa en Microsoft Excel o Google Sheets sin pérdida de tildes ni símbolos.
+            </Text>
+
+            <TouchableOpacity
+              style={[styles.exportBtn, styles.csvBtn]}
+              onPress={handleExportCSV}
+              disabled={isExportingCsv || isGeneratingPdf}
+              activeOpacity={0.8}
+            >
+              {isExportingCsv ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.exportBtnText}>⬇ Exportar Libro Contable (.CSV)</Text>
+              )}
+            </TouchableOpacity>
           </View>
         </View>
-
-        <Text style={styles.exportDesc}>
-          Compagina un estado de resultados formal en tamaño A4 con gráficos vectoriales SVG embebidos, control de márgenes (@page), inhibición de cortes destructivos (break-inside: avoid) y separación de secciones (break-before: always).
-        </Text>
-
-        <TouchableOpacity
-          style={[styles.exportBtn, styles.pdfBtn]}
-          onPress={handleGeneratePDF}
-          disabled={isGeneratingPdf || isExportingCsv}
-        >
-          {isGeneratingPdf ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.exportBtnText}>🖨️ Generar y Compartir Reporte (.PDF)</Text>
-          )}
-        </TouchableOpacity>
-      </View>
-
-      {lastReportInfo && (
-        <View style={styles.feedbackBanner}>
-          <Text style={styles.feedbackText}>✓ {lastReportInfo}</Text>
-        </View>
-      )}
-    </ScrollView>
+      </ScrollView>
+    </LinearGradient>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    padding: 20,
-    paddingBottom: 40,
-    backgroundColor: THEME.colors.background,
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+  },
+  heroSection: {
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 8,
   },
   header: {
-    alignItems: 'center',
-    marginBottom: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 18,
   },
-  badge: {
-    backgroundColor: '#DBEAFE',
+  brandTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -0.4,
+    lineHeight: 28,
+  },
+  brandSubtitle: {
+    fontSize: 21,
+    fontWeight: '400',
+    color: 'rgba(255, 255, 255, 0.88)',
+    letterSpacing: -0.2,
+    lineHeight: 25,
+  },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 999,
-    marginBottom: 10,
-  },
-  badgeText: {
-    color: THEME.colors.primary,
-    fontSize: 11,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: THEME.colors.textPrimary,
-    marginBottom: 6,
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 13,
-    color: THEME.colors.textSecondary,
-    textAlign: 'center',
-    paddingHorizontal: 12,
-    lineHeight: 18,
-  },
-  summaryCard: {
-    backgroundColor: THEME.colors.card,
-    borderRadius: 16,
-    padding: 16,
     borderWidth: 1,
-    borderColor: THEME.colors.border,
-    marginBottom: 16,
-    gap: 12,
-  },
-  cardSectionTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: THEME.colors.textSecondary,
-    textTransform: 'uppercase',
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  statItem: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: THEME.colors.border,
-  },
-  statLabel: {
-    fontSize: 11,
-    color: THEME.colors.textSecondary,
-    fontWeight: '600',
-  },
-  statValue: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: THEME.colors.textPrimary,
-    marginTop: 4,
-  },
-  exportCard: {
-    backgroundColor: THEME.colors.card,
-    borderRadius: 16,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: THEME.colors.border,
-    marginBottom: 16,
-  },
-  cardHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 12,
-  },
-  iconBadge: {
-    width: 46,
-    height: 46,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  iconEmoji: {
-    fontSize: 22,
-  },
-  cardTitleWrap: {
-    flex: 1,
-  },
-  exportTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: THEME.colors.textPrimary,
-  },
-  exportTech: {
-    fontSize: 12,
-    color: THEME.colors.primary,
-    fontWeight: '600',
+    borderColor: 'rgba(255, 255, 255, 0.16)',
     marginTop: 2,
   },
-  exportDesc: {
-    fontSize: 13,
-    color: THEME.colors.textSecondary,
-    lineHeight: 19,
-    marginBottom: 16,
+  dot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: '#38BDF8',
   },
-  exportBtn: {
-    height: 48,
-    borderRadius: 12,
-    justifyContent: 'center',
+  statusPillText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.6,
+  },
+  outerGlowWrapper: {
+    marginBottom: 18,
+    borderRadius: 26,
+    shadowColor: '#38BDF8',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.28,
+    shadowRadius: 18,
+    elevation: 10,
+  },
+  gradientBorder: {
+    borderRadius: 26,
+    padding: 1.5,
+  },
+  blurContainer: {
+    borderRadius: 24.5,
+    overflow: 'hidden',
+  },
+  innerGlass: {
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 18,
+    borderRadius: 24.5,
+  },
+  glassTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 4,
   },
-  csvBtn: {
-    backgroundColor: THEME.colors.success,
-  },
-  pdfBtn: {
-    backgroundColor: THEME.colors.primary,
-  },
-  exportBtnText: {
-    color: '#fff',
-    fontSize: 14,
+  glassLabel: {
+    color: 'rgba(255, 255, 255, 0.78)',
+    fontSize: 11,
     fontWeight: '700',
+    letterSpacing: 0.8,
+  },
+  opsBadge: {
+    backgroundColor: 'rgba(15, 23, 42, 0.5)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.18)',
+  },
+  opsBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  balanceText: {
+    color: '#FFFFFF',
+    fontSize: 34,
+    fontWeight: '800',
+    letterSpacing: -0.8,
+    marginBottom: 14,
+  },
+  metricsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  metricPill: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.16)',
+  },
+  metricPillLabel: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  metricPillVal: {
+    fontSize: 14,
+    fontWeight: '800',
+    marginTop: 2,
+  },
+  bottomSheet: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 32,
+    minHeight: 430,
+  },
+  sheetHandle: {
+    width: 38,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#E2E8F0',
+    alignSelf: 'center',
+    marginBottom: 14,
+  },
+  sheetSectionTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0F172A',
+    letterSpacing: -0.3,
+    marginBottom: 14,
   },
   feedbackBanner: {
     backgroundColor: '#ECFDF5',
     borderWidth: 1,
     borderColor: '#10B981',
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 12,
     alignItems: 'center',
+    marginBottom: 14,
   },
   feedbackText: {
     color: '#065F46',
     fontSize: 13,
+    fontWeight: '700',
+  },
+  exportCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 14,
+  },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 10,
+  },
+  iconAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  iconEmoji: {
+    fontSize: 20,
+  },
+  cardTitleWrap: {
+    flex: 1,
+  },
+  exportTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  exportTech: {
+    fontSize: 12,
+    color: '#64748B',
     fontWeight: '600',
+    marginTop: 2,
+  },
+  exportDesc: {
+    fontSize: 13,
+    color: '#475569',
+    lineHeight: 18,
+    marginBottom: 14,
+  },
+  exportBtn: {
+    height: 46,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pdfBtn: {
+    backgroundColor: THEME.colors.primary,
+  },
+  csvBtn: {
+    backgroundColor: '#0F172A',
+  },
+  exportBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

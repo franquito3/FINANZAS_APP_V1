@@ -1,12 +1,13 @@
 import React from 'react';
 import { StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 import { AuthScreen } from '../../screens/AuthScreen';
-import { THEME } from '../../constants';
 
 export default function AuthRoute() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      <StatusBar style="light" />
       <AuthScreen />
     </SafeAreaView>
   );
@@ -15,6 +16,6 @@ export default function AuthRoute() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: THEME.colors.background,
+    backgroundColor: '#070D2D',
   },
 });

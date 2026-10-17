@@ -6,9 +6,14 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  ScrollView,
+  Platform,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
+import * as Haptics from 'expo-haptics';
 import { useAuth } from '../context/AuthContext';
-import { THEME, APP_CONFIG } from '../constants';
+import { THEME } from '../constants';
 import { isSupabaseConfigured } from '../config/env';
 import { db } from '../db/powersync';
 
@@ -17,6 +22,7 @@ export const AuthScreen: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleGoogleLogin = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (!isSupabaseConfigured()) {
       Alert.alert(
         'Configuración Requerida',
@@ -44,7 +50,7 @@ export const AuthScreen: React.FC = () => {
   };
 
   const handleSignOut = async () => {
-    // Signing out wipes the local database; warn if there are unsynced changes
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     let pending = 0;
     try {
       pending = (await db.getUploadQueueStats()).count ?? 0;
@@ -68,212 +74,384 @@ export const AuthScreen: React.FC = () => {
 
   if (isLoading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={THEME.colors.primary} />
-      </View>
+      <LinearGradient
+        colors={['#070D2D', '#161D65', '#351875']}
+        style={styles.center}
+      >
+        <ActivityIndicator size="large" color="#38BDF8" />
+      </LinearGradient>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>Fase 2: Autenticación</Text>
-        </View>
-        <Text style={styles.title}>{APP_CONFIG.NAME}</Text>
-        <Text style={styles.subtitle}>Gestión Financiera Segura con Google OAuth & RLS</Text>
-      </View>
+    <LinearGradient
+      colors={['#070D2D', '#161D65', '#351875']}
+      start={{ x: 0.1, y: 0 }}
+      end={{ x: 0.9, y: 0.55 }}
+      style={styles.container}
+    >
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Top Hero Area */}
+        <View style={styles.heroSection}>
+          <View style={styles.header}>
+            <View>
+              <Text style={styles.brandTitle}>ProyectoX</Text>
+              <Text style={styles.brandSubtitle}>Sesión & Seguridad</Text>
+            </View>
 
-      <View style={styles.card}>
-        {session && user ? (
-          <View style={styles.sessionBox}>
-            <Text style={styles.sessionStatus}>✓ Sesión Activa</Text>
-            <Text style={styles.userEmail}>{user.email}</Text>
-            <Text style={styles.userId}>ID: {user.id}</Text>
-
-            <TouchableOpacity
-              style={[styles.button, styles.signOutButton]}
-              onPress={handleSignOut}
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.signOutButtonText}>Cerrar Sesión</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={styles.authBox}>
-            <Text style={styles.authTitle}>Accede a tus Finanzas</Text>
-            <Text style={styles.authDescription}>
-              Inicia sesión de forma segura para sincronizar tus transacciones y presupuestos.
-            </Text>
-
-            <TouchableOpacity
-              style={[styles.button, styles.googleButton]}
-              onPress={handleGoogleLogin}
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <View style={styles.buttonContent}>
-                  <Text style={styles.googleIcon}>G</Text>
-                  <Text style={styles.googleButtonText}>Continuar con Google</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-
-            <View style={styles.securityNotice}>
-              <Text style={styles.securityText}>
-                🔒 Tokens cifrados con hardware (Keychain / Keystore)
-              </Text>
-              <Text style={styles.securityText}>
-                🛡️ Aislamiento de datos con Row Level Security (RLS)
+            <View style={styles.statusPill}>
+              <View
+                style={[
+                  styles.dot,
+                  { backgroundColor: session && user ? '#10B981' : '#38BDF8' },
+                ]}
+              />
+              <Text style={styles.statusPillText}>
+                {session && user ? 'ACTIVA' : 'LOCAL'}
               </Text>
             </View>
           </View>
-        )}
-      </View>
-    </View>
+
+          {/* Liquid Glass Identity Card */}
+          <View style={styles.outerGlowWrapper}>
+            <LinearGradient
+              colors={[
+                'rgba(56, 189, 248, 0.75)',
+                'rgba(139, 92, 246, 0.45)',
+                'rgba(56, 189, 248, 0.65)',
+              ]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.gradientBorder}
+            >
+              <BlurView
+                intensity={Platform.OS === 'ios' ? 42 : 65}
+                tint="dark"
+                style={styles.blurContainer}
+              >
+                <LinearGradient
+                  colors={[
+                    'rgba(255, 255, 255, 0.14)',
+                    'rgba(30, 41, 59, 0.38)',
+                    'rgba(15, 23, 42, 0.52)',
+                  ]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.innerGlass}
+                >
+                  {session && user ? (
+                    <View>
+                      <Text style={styles.glassLabel}>CUENTA SINCRONIZADA</Text>
+                      <Text style={styles.userEmail} numberOfLines={1}>
+                        {user.email}
+                      </Text>
+                      <Text style={styles.userId}>UUID: {user.id}</Text>
+
+                      <TouchableOpacity
+                        style={[styles.glassActionBtn, styles.signOutGlassBtn]}
+                        onPress={handleSignOut}
+                        disabled={isSubmitting}
+                        activeOpacity={0.78}
+                      >
+                        {isSubmitting ? (
+                          <ActivityIndicator color="#fff" />
+                        ) : (
+                          <Text style={styles.glassActionText}>Cerrar Sesión Segura</Text>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <View>
+                      <Text style={styles.glassLabel}>IDENTIDAD EN LA NUBE</Text>
+                      <Text style={styles.authTitle}>Accede a tus Finanzas</Text>
+                      <Text style={styles.authDescription}>
+                        Inicia sesión con Google OAuth para respaldar tus billeteras y presupuestos en la nube con cifrado extremo.
+                      </Text>
+
+                      <TouchableOpacity
+                        style={styles.glassActionBtn}
+                        onPress={handleGoogleLogin}
+                        disabled={isSubmitting}
+                        activeOpacity={0.78}
+                      >
+                        {isSubmitting ? (
+                          <ActivityIndicator color="#fff" />
+                        ) : (
+                          <View style={styles.buttonContent}>
+                            <View style={styles.googleBadge}>
+                              <Text style={styles.googleIcon}>G</Text>
+                            </View>
+                            <Text style={styles.glassActionText}>Continuar con Google</Text>
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </LinearGradient>
+              </BlurView>
+            </LinearGradient>
+          </View>
+        </View>
+
+        {/* Bottom White Sheet (borderTopRadius: 32) */}
+        <View style={styles.bottomSheet}>
+          <View style={styles.sheetHandle} />
+
+          <Text style={styles.sheetSectionTitle}>Arquitectura de Protección</Text>
+
+          <View style={styles.securityCard}>
+            <View style={[styles.secAvatar, { backgroundColor: '#2563EB' }]}>
+              <Text style={styles.secEmoji}>🔒</Text>
+            </View>
+            <View style={styles.secInfo}>
+              <Text style={styles.secTitle}>Almacenamiento Cifrado por Hardware</Text>
+              <Text style={styles.secDesc}>
+                Los tokens JWT se resguardan mediante iOS Keychain y Android Keystore con fragmentación segura en bloques.
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.securityCard}>
+            <View style={[styles.secAvatar, { backgroundColor: '#8B5CF6' }]}>
+              <Text style={styles.secEmoji}>🛡️</Text>
+            </View>
+            <View style={styles.secInfo}>
+              <Text style={styles.secTitle}>Row Level Security (RLS PostgreSQL)</Text>
+              <Text style={styles.secDesc}>
+                Políticas criptográficas por fila en Supabase garantizan que ningún tercero pueda consultar ni alterar tus registros.
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.securityCard}>
+            <View style={[styles.secAvatar, { backgroundColor: '#10B981' }]}>
+              <Text style={styles.secEmoji}>⚡</Text>
+            </View>
+            <View style={styles.secInfo}>
+              <Text style={styles.secTitle}>Operación Autónoma Sin Cuenta</Text>
+              <Text style={styles.secDesc}>
+                Puedes usar toda la aplicación en modo local (SQLite) sin conexión y vincular tu cuenta de Google cuando lo desees.
+              </Text>
+            </View>
+          </View>
+        </View>
+      </ScrollView>
+    </LinearGradient>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: THEME.colors.background,
-    justifyContent: 'center',
-    padding: 24,
   },
   center: {
     flex: 1,
-    backgroundColor: THEME.colors.background,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  header: {
-    alignItems: 'center',
-    marginBottom: 32,
+  scrollContent: {
+    flexGrow: 1,
   },
-  badge: {
-    backgroundColor: '#DBEAFE',
+  heroSection: {
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 8,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 18,
+  },
+  brandTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -0.4,
+    lineHeight: 28,
+  },
+  brandSubtitle: {
+    fontSize: 21,
+    fontWeight: '400',
+    color: 'rgba(255, 255, 255, 0.88)',
+    letterSpacing: -0.2,
+    lineHeight: 25,
+  },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 999,
-    marginBottom: 16,
-  },
-  badgeText: {
-    color: THEME.colors.primary,
-    fontSize: 12,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: THEME.colors.textPrimary,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 14,
-    color: THEME.colors.textSecondary,
-    textAlign: 'center',
-    paddingHorizontal: 16,
-  },
-  card: {
-    backgroundColor: THEME.colors.card,
-    borderRadius: 20,
-    padding: 24,
     borderWidth: 1,
-    borderColor: THEME.colors.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 3,
+    borderColor: 'rgba(255, 255, 255, 0.16)',
+    marginTop: 2,
   },
-  authBox: {
-    alignItems: 'center',
+  dot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+  },
+  statusPillText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.6,
+  },
+  outerGlowWrapper: {
+    marginBottom: 18,
+    borderRadius: 26,
+    shadowColor: '#38BDF8',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.28,
+    shadowRadius: 18,
+    elevation: 10,
+  },
+  gradientBorder: {
+    borderRadius: 26,
+    padding: 1.5,
+  },
+  blurContainer: {
+    borderRadius: 24.5,
+    overflow: 'hidden',
+  },
+  innerGlass: {
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 18,
+    borderRadius: 24.5,
+  },
+  glassLabel: {
+    color: 'rgba(255, 255, 255, 0.78)',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    marginBottom: 6,
   },
   authTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: THEME.colors.textPrimary,
-    marginBottom: 8,
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -0.4,
+    marginBottom: 6,
   },
   authDescription: {
-    fontSize: 14,
-    color: THEME.colors.textSecondary,
-    textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 20,
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.82)',
+    lineHeight: 19,
+    marginBottom: 16,
   },
-  button: {
-    width: '100%',
-    height: 52,
-    borderRadius: 12,
+  userEmail: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  userId: {
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.68)',
+    fontFamily: 'monospace',
+    marginBottom: 16,
+  },
+  glassActionBtn: {
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: 'rgba(37, 99, 235, 0.72)',
+    borderWidth: 1,
+    borderColor: 'rgba(147, 197, 253, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  googleButton: {
-    backgroundColor: '#4285F4',
+  signOutGlassBtn: {
+    backgroundColor: 'rgba(239, 68, 68, 0.65)',
+    borderColor: 'rgba(252, 165, 165, 0.5)',
   },
   buttonContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
+  },
+  googleBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   googleIcon: {
-    color: '#fff',
-    fontSize: 20,
+    color: '#2563EB',
+    fontSize: 14,
     fontWeight: '900',
   },
-  googleButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  signOutButton: {
-    backgroundColor: THEME.colors.danger,
-    marginTop: 20,
-  },
-  signOutButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  sessionBox: {
-    alignItems: 'center',
-    gap: 8,
-  },
-  sessionStatus: {
-    fontSize: 16,
+  glassActionText: {
+    color: '#FFFFFF',
+    fontSize: 14,
     fontWeight: '700',
-    color: THEME.colors.success,
   },
-  userEmail: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: THEME.colors.textPrimary,
+  bottomSheet: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 32,
+    minHeight: 420,
   },
-  userId: {
+  sheetHandle: {
+    width: 38,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#E2E8F0',
+    alignSelf: 'center',
+    marginBottom: 14,
+  },
+  sheetSectionTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0F172A',
+    letterSpacing: -0.3,
+    marginBottom: 14,
+  },
+  securityCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 18,
+    padding: 15,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 12,
+    gap: 12,
+  },
+  secAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  secEmoji: {
+    fontSize: 20,
+  },
+  secInfo: {
+    flex: 1,
+  },
+  secTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 3,
+  },
+  secDesc: {
     fontSize: 12,
-    color: THEME.colors.textSecondary,
-    fontFamily: 'monospace',
-  },
-  securityNotice: {
-    marginTop: 24,
-    width: '100%',
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: THEME.colors.border,
-    gap: 8,
-  },
-  securityText: {
-    fontSize: 12,
-    color: THEME.colors.textSecondary,
+    color: '#475569',
+    lineHeight: 17,
   },
 });
