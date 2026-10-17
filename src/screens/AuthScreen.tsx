@@ -6,23 +6,18 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
-  ScrollView,
-  Platform,
 } from 'react-native';
+import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
-import * as Haptics from 'expo-haptics';
 import { useAuth } from '../context/AuthContext';
 import { THEME } from '../constants';
 import { isSupabaseConfigured } from '../config/env';
-import { db } from '../db/powersync';
 
 export const AuthScreen: React.FC = () => {
   const { session, user, isLoading, signInWithGoogle, signOut } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleGoogleLogin = async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (!isSupabaseConfigured()) {
       Alert.alert(
         'Configuración Requerida',
@@ -40,7 +35,7 @@ export const AuthScreen: React.FC = () => {
     }
   };
 
-  const doSignOut = async () => {
+  const handleSignOut = async () => {
     setIsSubmitting(true);
     const { error } = await signOut();
     setIsSubmitting(false);
@@ -49,327 +44,238 @@ export const AuthScreen: React.FC = () => {
     }
   };
 
-  const handleSignOut = async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    let pending = 0;
-    try {
-      pending = (await db.getUploadQueueStats()).count ?? 0;
-    } catch {
-      // ignore
-    }
-
-    if (pending > 0) {
-      Alert.alert(
-        'Cambios sin sincronizar',
-        `Tienes ${pending} cambio(s) que aún no se han subido a la nube. Si cierras sesión ahora se perderán. Conéctate a internet y espera a que se sincronicen.`,
-        [
-          { text: 'Cancelar', style: 'cancel' },
-          { text: 'Cerrar sesión igualmente', style: 'destructive', onPress: doSignOut },
-        ]
-      );
-      return;
-    }
-    await doSignOut();
-  };
-
   if (isLoading) {
     return (
-      <LinearGradient
-        colors={['#070D2D', '#161D65', '#351875']}
-        style={styles.center}
-      >
-        <ActivityIndicator size="large" color="#38BDF8" />
-      </LinearGradient>
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color={THEME.colors.primary} />
+      </View>
     );
   }
 
   return (
-    <LinearGradient
-      colors={['#070D2D', '#161D65', '#351875']}
-      start={{ x: 0.1, y: 0 }}
-      end={{ x: 0.9, y: 0.55 }}
-      style={styles.container}
+    <BottomSheetScrollView
+      contentContainerStyle={styles.sheetContent}
+      showsVerticalScrollIndicator={false}
     >
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Top Hero Area */}
-        <View style={styles.heroSection}>
-          <View style={styles.header}>
-            <View>
-              <Text style={styles.brandTitle}>ProyectoX</Text>
-              <Text style={styles.brandSubtitle}>Sesión & Seguridad</Text>
-            </View>
+      <View style={styles.sectionHeaderRow}>
+        <Text style={styles.sheetSectionTitle}>Sesión y Seguridad</Text>
+        <View
+          style={[
+            styles.sessionPill,
+            { backgroundColor: session && user ? '#DCFCE7' : '#F1F5F9' },
+          ]}
+        >
+          <Text
+            style={[
+              styles.sessionPillText,
+              { color: session && user ? '#15803D' : '#475569' },
+            ]}
+          >
+            {session && user ? '● Nube Activa' : '● Modo Local'}
+          </Text>
+        </View>
+      </View>
 
-            <View style={styles.statusPill}>
-              <View
-                style={[
-                  styles.dot,
-                  { backgroundColor: session && user ? '#10B981' : '#38BDF8' },
-                ]}
-              />
-              <Text style={styles.statusPillText}>
-                {session && user ? 'ACTIVA' : 'LOCAL'}
-              </Text>
-            </View>
-          </View>
+      {/* Main Identity Card inside Bottom Sheet */}
+      <View style={styles.identityCard}>
+        {session && user ? (
+          <View>
+            <Text style={styles.identityLabel}>CUENTA VINCULADA</Text>
+            <Text style={styles.userEmail} numberOfLines={1}>
+              {user.email}
+            </Text>
+            <Text style={styles.userId}>UUID: {user.id}</Text>
+            <Text style={styles.retentionNote}>
+              Al cerrar sesión, tus transacciones y billeteras locales en SQLite se conservan intactas en este dispositivo.
+            </Text>
 
-          {/* Liquid Glass Identity Card */}
-          <View style={styles.outerGlowWrapper}>
-            <LinearGradient
-              colors={[
-                'rgba(56, 189, 248, 0.75)',
-                'rgba(139, 92, 246, 0.45)',
-                'rgba(56, 189, 248, 0.65)',
-              ]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.gradientBorder}
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.signOutBtn]}
+              onPress={handleSignOut}
+              disabled={isSubmitting}
+              activeOpacity={0.8}
             >
-              <BlurView
-                intensity={Platform.OS === 'ios' ? 42 : 65}
-                tint="dark"
-                style={styles.blurContainer}
+              {isSubmitting ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.actionBtnText}>Cerrar Sesión (Conservar Datos)</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View>
+            <Text style={styles.identityLabel}>RESPALDO EN LA NUBE</Text>
+            <Text style={styles.authTitle}>Sincroniza con Google OAuth</Text>
+            <Text style={styles.authDescription}>
+              Vincula tu cuenta para respaldar tus movimientos en la nube con Supabase & PowerSync. Tus datos locales nunca se pierden.
+            </Text>
+
+            <TouchableOpacity
+              style={styles.googleBtnWrapper}
+              onPress={handleGoogleLogin}
+              disabled={isSubmitting}
+              activeOpacity={0.85}
+            >
+              <LinearGradient
+                colors={['#1E40AF', '#7C3AED']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.googleGradientBtn}
               >
-                <LinearGradient
-                  colors={[
-                    'rgba(255, 255, 255, 0.14)',
-                    'rgba(30, 41, 59, 0.38)',
-                    'rgba(15, 23, 42, 0.52)',
-                  ]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.innerGlass}
-                >
-                  {session && user ? (
-                    <View>
-                      <Text style={styles.glassLabel}>CUENTA SINCRONIZADA</Text>
-                      <Text style={styles.userEmail} numberOfLines={1}>
-                        {user.email}
-                      </Text>
-                      <Text style={styles.userId}>UUID: {user.id}</Text>
-
-                      <TouchableOpacity
-                        style={[styles.glassActionBtn, styles.signOutGlassBtn]}
-                        onPress={handleSignOut}
-                        disabled={isSubmitting}
-                        activeOpacity={0.78}
-                      >
-                        {isSubmitting ? (
-                          <ActivityIndicator color="#fff" />
-                        ) : (
-                          <Text style={styles.glassActionText}>Cerrar Sesión Segura</Text>
-                        )}
-                      </TouchableOpacity>
+                {isSubmitting ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <View style={styles.buttonContent}>
+                    <View style={styles.googleBadge}>
+                      <Text style={styles.googleIcon}>G</Text>
                     </View>
-                  ) : (
-                    <View>
-                      <Text style={styles.glassLabel}>IDENTIDAD EN LA NUBE</Text>
-                      <Text style={styles.authTitle}>Accede a tus Finanzas</Text>
-                      <Text style={styles.authDescription}>
-                        Inicia sesión con Google OAuth para respaldar tus billeteras y presupuestos en la nube con cifrado extremo.
-                      </Text>
-
-                      <TouchableOpacity
-                        style={styles.glassActionBtn}
-                        onPress={handleGoogleLogin}
-                        disabled={isSubmitting}
-                        activeOpacity={0.78}
-                      >
-                        {isSubmitting ? (
-                          <ActivityIndicator color="#fff" />
-                        ) : (
-                          <View style={styles.buttonContent}>
-                            <View style={styles.googleBadge}>
-                              <Text style={styles.googleIcon}>G</Text>
-                            </View>
-                            <Text style={styles.glassActionText}>Continuar con Google</Text>
-                          </View>
-                        )}
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                </LinearGradient>
-              </BlurView>
-            </LinearGradient>
+                    <Text style={styles.actionBtnText}>Continuar con Google</Text>
+                  </View>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
           </View>
+        )}
+      </View>
+
+      {/* Security Architecture Cards */}
+      <Text style={styles.subSectionTitle}>Arquitectura de Protección</Text>
+
+      <View style={styles.securityCard}>
+        <View style={[styles.secAvatar, { backgroundColor: '#7C3AED' }]}>
+          <Text style={styles.secEmoji}>🔒</Text>
         </View>
-
-        {/* Bottom White Sheet (borderTopRadius: 32) */}
-        <View style={styles.bottomSheet}>
-          <View style={styles.sheetHandle} />
-
-          <Text style={styles.sheetSectionTitle}>Arquitectura de Protección</Text>
-
-          <View style={styles.securityCard}>
-            <View style={[styles.secAvatar, { backgroundColor: '#2563EB' }]}>
-              <Text style={styles.secEmoji}>🔒</Text>
-            </View>
-            <View style={styles.secInfo}>
-              <Text style={styles.secTitle}>Almacenamiento Cifrado por Hardware</Text>
-              <Text style={styles.secDesc}>
-                Los tokens JWT se resguardan mediante iOS Keychain y Android Keystore con fragmentación segura en bloques.
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.securityCard}>
-            <View style={[styles.secAvatar, { backgroundColor: '#8B5CF6' }]}>
-              <Text style={styles.secEmoji}>🛡️</Text>
-            </View>
-            <View style={styles.secInfo}>
-              <Text style={styles.secTitle}>Row Level Security (RLS PostgreSQL)</Text>
-              <Text style={styles.secDesc}>
-                Políticas criptográficas por fila en Supabase garantizan que ningún tercero pueda consultar ni alterar tus registros.
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.securityCard}>
-            <View style={[styles.secAvatar, { backgroundColor: '#10B981' }]}>
-              <Text style={styles.secEmoji}>⚡</Text>
-            </View>
-            <View style={styles.secInfo}>
-              <Text style={styles.secTitle}>Operación Autónoma Sin Cuenta</Text>
-              <Text style={styles.secDesc}>
-                Puedes usar toda la aplicación en modo local (SQLite) sin conexión y vincular tu cuenta de Google cuando lo desees.
-              </Text>
-            </View>
-          </View>
+        <View style={styles.secInfo}>
+          <Text style={styles.secTitle}>Cifrado por Hardware (Keychain / Keystore)</Text>
+          <Text style={styles.secDesc}>
+            Tokens JWT resguardados mediante hardware seguro sin exposición en texto plano.
+          </Text>
         </View>
-      </ScrollView>
-    </LinearGradient>
+      </View>
+
+      <View style={styles.securityCard}>
+        <View style={[styles.secAvatar, { backgroundColor: '#2563EB' }]}>
+          <Text style={styles.secEmoji}>🛡️</Text>
+        </View>
+        <View style={styles.secInfo}>
+          <Text style={styles.secTitle}>Row Level Security (RLS PostgreSQL)</Text>
+          <Text style={styles.secDesc}>
+            Aislamiento criptográfico por usuario en la nube y sincronización automática en segundo plano.
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.securityCard}>
+        <View style={[styles.secAvatar, { backgroundColor: '#10B981' }]}>
+          <Text style={styles.secEmoji}>💾</Text>
+        </View>
+        <View style={styles.secInfo}>
+          <Text style={styles.secTitle}>Persistencia SQLite Permanente</Text>
+          <Text style={styles.secDesc}>
+            Tus registros permanecen almacenados en SQLite local incluso si cierras sesión o trabajas sin internet.
+          </Text>
+        </View>
+      </View>
+    </BottomSheetScrollView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
   center: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingVertical: 40,
   },
-  scrollContent: {
-    flexGrow: 1,
-  },
-  heroSection: {
+  sheetContent: {
     paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 8,
+    paddingTop: 6,
+    paddingBottom: 36,
   },
-  header: {
+  sectionHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 18,
-  },
-  brandTitle: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: -0.4,
-    lineHeight: 28,
-  },
-  brandSubtitle: {
-    fontSize: 21,
-    fontWeight: '400',
-    color: 'rgba(255, 255, 255, 0.88)',
-    letterSpacing: -0.2,
-    lineHeight: 25,
-  },
-  statusPill: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(15, 23, 42, 0.55)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.16)',
-    marginTop: 2,
+    marginBottom: 12,
   },
-  dot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-  },
-  statusPillText: {
-    fontSize: 11,
+  sheetSectionTitle: {
+    fontSize: 18,
     fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: 0.6,
+    color: '#0F172A',
+    letterSpacing: -0.3,
   },
-  outerGlowWrapper: {
-    marginBottom: 18,
-    borderRadius: 26,
-    shadowColor: '#38BDF8',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.28,
-    shadowRadius: 18,
-    elevation: 10,
+  sessionPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
   },
-  gradientBorder: {
-    borderRadius: 26,
-    padding: 1.5,
-  },
-  blurContainer: {
-    borderRadius: 24.5,
-    overflow: 'hidden',
-  },
-  innerGlass: {
-    paddingHorizontal: 20,
-    paddingTop: 18,
-    paddingBottom: 18,
-    borderRadius: 24.5,
-  },
-  glassLabel: {
-    color: 'rgba(255, 255, 255, 0.78)',
+  sessionPillText: {
     fontSize: 11,
     fontWeight: '700',
+  },
+  identityCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 18,
+  },
+  identityLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#7C3AED',
     letterSpacing: 0.8,
-    marginBottom: 6,
+    marginBottom: 4,
   },
   authTitle: {
-    fontSize: 22,
+    fontSize: 17,
     fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: -0.4,
-    marginBottom: 6,
+    color: '#0F172A',
+    marginBottom: 4,
   },
   authDescription: {
-    fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.82)',
-    lineHeight: 19,
-    marginBottom: 16,
+    fontSize: 12.5,
+    color: '#475569',
+    lineHeight: 18,
+    marginBottom: 14,
   },
   userEmail: {
-    fontSize: 20,
+    fontSize: 17,
     fontWeight: '800',
-    color: '#FFFFFF',
-    marginBottom: 4,
+    color: '#0F172A',
+    marginBottom: 2,
   },
   userId: {
     fontSize: 11,
-    color: 'rgba(255, 255, 255, 0.68)',
+    color: '#64748B',
     fontFamily: 'monospace',
-    marginBottom: 16,
+    marginBottom: 8,
   },
-  glassActionBtn: {
-    height: 48,
+  retentionNote: {
+    fontSize: 12,
+    color: '#475569',
+    lineHeight: 17,
+    marginBottom: 14,
+  },
+  googleBtnWrapper: {
+    height: 46,
     borderRadius: 14,
-    backgroundColor: 'rgba(37, 99, 235, 0.72)',
-    borderWidth: 1,
-    borderColor: 'rgba(147, 197, 253, 0.5)',
+    overflow: 'hidden',
+  },
+  googleGradientBtn: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  signOutGlassBtn: {
-    backgroundColor: 'rgba(239, 68, 68, 0.65)',
-    borderColor: 'rgba(252, 165, 165, 0.5)',
+  actionBtn: {
+    height: 46,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  signOutBtn: {
+    backgroundColor: '#EF4444',
   },
   buttonContent: {
     flexDirection: 'row',
@@ -377,81 +283,62 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   googleBadge: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
   },
   googleIcon: {
-    color: '#2563EB',
-    fontSize: 14,
+    color: '#1E40AF',
+    fontSize: 13,
     fontWeight: '900',
   },
-  glassActionText: {
+  actionBtnText: {
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '700',
   },
-  bottomSheet: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 32,
-    minHeight: 420,
-  },
-  sheetHandle: {
-    width: 38,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#E2E8F0',
-    alignSelf: 'center',
-    marginBottom: 14,
-  },
-  sheetSectionTitle: {
-    fontSize: 18,
+  subSectionTitle: {
+    fontSize: 14,
     fontWeight: '800',
     color: '#0F172A',
-    letterSpacing: -0.3,
-    marginBottom: 14,
+    marginBottom: 10,
   },
   securityCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#F8FAFC',
-    borderRadius: 18,
-    padding: 15,
+    borderRadius: 16,
+    padding: 14,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    marginBottom: 12,
+    marginBottom: 10,
     gap: 12,
   },
   secAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
   },
   secEmoji: {
-    fontSize: 20,
+    fontSize: 18,
   },
   secInfo: {
     flex: 1,
   },
   secTitle: {
-    fontSize: 14,
+    fontSize: 13.5,
     fontWeight: '800',
     color: '#0F172A',
-    marginBottom: 3,
+    marginBottom: 2,
   },
   secDesc: {
     fontSize: 12,
     color: '#475569',
-    lineHeight: 17,
+    lineHeight: 16.5,
   },
 });

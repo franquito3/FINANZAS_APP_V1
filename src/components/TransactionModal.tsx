@@ -9,11 +9,13 @@ import {
   ScrollView,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { Category, TransactionType, Wallet } from '../types';
 import { THEME } from '../constants';
 import { financeService } from '../services/data/financeService';
+import { seedLocalDefaults } from '../services/data/seedData';
 import { useAuth } from '../context/AuthContext';
 import { LOCAL_DEMO_USER_ID } from '../utils/id';
 
@@ -38,6 +40,7 @@ export const TransactionModal: React.FC<Props> = ({
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
   const [selectedWalletId, setSelectedWalletId] = useState<string>('');
+  const [customCategoryName, setCustomCategoryName] = useState('');
   const [notes, setNotes] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
@@ -45,6 +48,7 @@ export const TransactionModal: React.FC<Props> = ({
     if (visible) {
       setType(initialType);
       setAmountStr('0');
+      setCustomCategoryName('');
       setNotes('');
       loadCategories(initialType);
       if (wallets.length > 0 && !selectedWalletId) {
@@ -61,18 +65,29 @@ export const TransactionModal: React.FC<Props> = ({
 
   const loadCategories = async (txType: TransactionType) => {
     try {
+      await seedLocalDefaults(user?.id);
       const cats = await financeService.getCategories(txType);
-      setCategories(cats);
-      if (cats.length > 0) {
-        setSelectedCategoryId(cats[0].id);
+      // Ensure 'Otros' appears at the end of the category list
+      const sorted = [...cats].sort((a, b) => {
+        if (a.name.toLowerCase() === 'otros') return 1;
+        if (b.name.toLowerCase() === 'otros') return -1;
+        return a.name.localeCompare(b.name);
+      });
+      setCategories(sorted);
+      if (sorted.length > 0) {
+        setSelectedCategoryId(sorted[0].id);
       }
     } catch (e) {
       console.error('[TransactionModal] Error loading categories', e);
     }
   };
 
+  const selectedCategory = categories.find((c) => c.id === selectedCategoryId);
+  const isOtrosSelected = selectedCategory?.name.trim().toLowerCase() === 'otros';
+
   const handleKeyPress = (val: string) => {
-    Haptics.selectionAsync();
+    // Strategic haptic #3: subtle Light impact on numeric keypad
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     if (val === '⌫') {
       if (amountStr.length <= 1) {
@@ -93,7 +108,6 @@ export const TransactionModal: React.FC<Props> = ({
     if (amountStr === '0') {
       setAmountStr(val);
     } else {
-      // Limit to 2 decimal places if dot is present
       const parts = amountStr.split('.');
       if (parts.length > 1 && parts[1].length >= 2) {
         return;
@@ -103,6 +117,9 @@ export const TransactionModal: React.FC<Props> = ({
   };
 
   const handleSave = async () => {
+    // Strategic haptic #4: subtle Light impact on final "Registrar Transacción" button
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
     const amount = parseFloat(amountStr);
     if (!amount || amount <= 0) {
       Alert.alert('Monto inválido', 'Por favor ingresa un monto mayor a 0');
@@ -121,17 +138,24 @@ export const TransactionModal: React.FC<Props> = ({
     }
     const userId = user?.id || LOCAL_DEMO_USER_ID;
 
+    // Combine custom "Otros" name with optional notes if provided
+    const trimmedCustom = customCategoryName.trim();
+    const trimmedNotes = notes.trim();
+    let finalNotes = trimmedNotes;
+    if (isOtrosSelected && trimmedCustom) {
+      finalNotes = trimmedNotes ? `${trimmedCustom} • ${trimmedNotes}` : trimmedCustom;
+    }
+
     setIsSaving(true);
     try {
       await financeService.createTransaction({
         amount,
         categoryId: selectedCategoryId,
         walletId,
-        notes,
+        notes: finalNotes,
         userId,
       });
 
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       onSuccess();
       onClose();
     } catch (err: any) {
@@ -145,26 +169,24 @@ export const TransactionModal: React.FC<Props> = ({
     <Modal
       visible={visible}
       animationType="slide"
-      transparent={true}
+      transparent={false}
+      statusBarTranslucent={true}
       onRequestClose={onClose}
     >
-      <View style={styles.overlay}>
-        <LinearGradient
-          colors={['#070D2D', '#161D65', '#351875']}
-          start={{ x: 0.1, y: 0 }}
-          end={{ x: 0.9, y: 0.6 }}
-          style={styles.modalContainer}
-        >
+      <LinearGradient
+        colors={['#070D2D', '#161D65', '#351875']}
+        start={{ x: 0.1, y: 0 }}
+        end={{ x: 0.9, y: 0.45 }}
+        style={styles.fullScreenContainer}
+      >
+        <SafeAreaView style={styles.safeArea} edges={['top']}>
           {/* Top Hero Header & Liquid Glass Amount Display */}
           <View style={styles.heroHeader}>
             <View style={styles.headerTopRow}>
               <View style={styles.typeSelector}>
                 <TouchableOpacity
                   style={[styles.typeBtn, type === 'EGRESO' && styles.typeBtnExpense]}
-                  onPress={() => {
-                    Haptics.selectionAsync();
-                    setType('EGRESO');
-                  }}
+                  onPress={() => setType('EGRESO')}
                 >
                   <Text
                     style={[
@@ -177,10 +199,7 @@ export const TransactionModal: React.FC<Props> = ({
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.typeBtn, type === 'INGRESO' && styles.typeBtnIncome]}
-                  onPress={() => {
-                    Haptics.selectionAsync();
-                    setType('INGRESO');
-                  }}
+                  onPress={() => setType('INGRESO')}
                 >
                   <Text
                     style={[
@@ -193,13 +212,7 @@ export const TransactionModal: React.FC<Props> = ({
                 </TouchableOpacity>
               </View>
 
-              <TouchableOpacity
-                style={styles.closeBtn}
-                onPress={() => {
-                  Haptics.selectionAsync();
-                  onClose();
-                }}
-              >
+              <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
                 <Text style={styles.closeBtnText}>✕</Text>
               </TouchableOpacity>
             </View>
@@ -225,11 +238,16 @@ export const TransactionModal: React.FC<Props> = ({
             </View>
           </View>
 
-          {/* White Bottom Sheet (borderTopRadius: 32) */}
+          {/* Full-Height White Sheet */}
           <View style={styles.whiteSheet}>
             <View style={styles.sheetHandle} />
 
-            <ScrollView style={styles.scrollArea} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              style={styles.scrollArea}
+              contentContainerStyle={styles.scrollAreaContent}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
               {/* Category Icon Grid */}
               <Text style={styles.sectionLabel}>Selecciona Categoría</Text>
               <View style={styles.categoryGrid}>
@@ -245,10 +263,7 @@ export const TransactionModal: React.FC<Props> = ({
                           backgroundColor: cat.color_hex + '18',
                         },
                       ]}
-                      onPress={() => {
-                        Haptics.selectionAsync();
-                        setSelectedCategoryId(cat.id);
-                      }}
+                      onPress={() => setSelectedCategoryId(cat.id)}
                     >
                       <View
                         style={[
@@ -272,6 +287,22 @@ export const TransactionModal: React.FC<Props> = ({
                 })}
               </View>
 
+              {/* Conditional Custom Name Input when "Otros" is selected */}
+              {isOtrosSelected && (
+                <View style={styles.customCategoryBox}>
+                  <Text style={styles.customCategoryLabel}>
+                    Nombre personalizado para &quot;Otros&quot; (opcional)
+                  </Text>
+                  <TextInput
+                    style={styles.customCategoryInput}
+                    placeholder="Ej. Regalo, Suscripción, Imprevisto..."
+                    placeholderTextColor={THEME.colors.textSecondary}
+                    value={customCategoryName}
+                    onChangeText={setCustomCategoryName}
+                  />
+                </View>
+              )}
+
               {/* Wallet selection pills */}
               <Text style={styles.sectionLabel}>Billetera</Text>
               <View style={styles.walletRow}>
@@ -282,10 +313,7 @@ export const TransactionModal: React.FC<Props> = ({
                       styles.walletPill,
                       selectedWalletId === w.id && styles.walletPillActive,
                     ]}
-                    onPress={() => {
-                      Haptics.selectionAsync();
-                      setSelectedWalletId(w.id);
-                    }}
+                    onPress={() => setSelectedWalletId(w.id)}
                   >
                     <Text
                       style={[
@@ -303,7 +331,7 @@ export const TransactionModal: React.FC<Props> = ({
               <View style={styles.noteBox}>
                 <TextInput
                   style={styles.noteInput}
-                  placeholder="Nota o descripción opcional..."
+                  placeholder="Nota o descripción adicional (opcional)..."
                   placeholderTextColor={THEME.colors.textSecondary}
                   value={notes}
                   onChangeText={setNotes}
@@ -353,27 +381,22 @@ export const TransactionModal: React.FC<Props> = ({
               </LinearGradient>
             </TouchableOpacity>
           </View>
-        </LinearGradient>
-      </View>
+        </SafeAreaView>
+      </LinearGradient>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
-  overlay: {
+  fullScreenContainer: {
     flex: 1,
-    backgroundColor: 'rgba(7, 13, 45, 0.65)',
-    justifyContent: 'flex-end',
   },
-  modalContainer: {
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    overflow: 'hidden',
-    maxHeight: '94%',
+  safeArea: {
+    flex: 1,
   },
   heroHeader: {
     paddingHorizontal: 20,
-    paddingTop: 16,
+    paddingTop: 10,
     paddingBottom: 14,
   },
   headerTopRow: {
@@ -464,12 +487,14 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   whiteSheet: {
+    flex: 1,
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
     paddingHorizontal: 20,
     paddingTop: 10,
-    paddingBottom: 22,
+    paddingBottom: 20,
+    justifyContent: 'space-between',
   },
   sheetHandle: {
     width: 38,
@@ -477,11 +502,13 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: '#E2E8F0',
     alignSelf: 'center',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   scrollArea: {
-    maxHeight: 175,
-    marginBottom: 6,
+    flex: 1,
+  },
+  scrollAreaContent: {
+    paddingBottom: 8,
   },
   sectionLabel: {
     fontSize: 11,
@@ -499,30 +526,54 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   categoryCard: {
-    width: '31%',
+    width: '23%',
     paddingVertical: 8,
-    paddingHorizontal: 6,
+    paddingHorizontal: 4,
     borderRadius: 14,
     borderWidth: 1.5,
     borderColor: '#F1F5F9',
     backgroundColor: '#F8FAFC',
     alignItems: 'center',
-    gap: 5,
+    gap: 4,
   },
   categoryAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     justifyContent: 'center',
     alignItems: 'center',
   },
   categoryIcon: {
-    fontSize: 16,
+    fontSize: 15,
   },
   categoryTitle: {
-    fontSize: 11,
+    fontSize: 10.5,
     color: '#475569',
     fontWeight: '600',
+  },
+  customCategoryBox: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    marginBottom: 10,
+  },
+  customCategoryLabel: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: '#475569',
+    marginBottom: 5,
+  },
+  customCategoryInput: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    fontSize: 13,
+    color: '#0F172A',
   },
   walletRow: {
     flexDirection: 'row',
@@ -550,7 +601,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   noteBox: {
-    marginBottom: 6,
+    marginBottom: 4,
   },
   noteInput: {
     backgroundColor: '#F8FAFC',
@@ -573,7 +624,7 @@ const styles = StyleSheet.create({
   },
   key: {
     flex: 1,
-    height: 44,
+    height: 46,
     backgroundColor: '#F8FAFC',
     borderRadius: 12,
     borderWidth: 1,
@@ -582,7 +633,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   keyText: {
-    fontSize: 19,
+    fontSize: 20,
     fontWeight: '800',
     color: '#0F172A',
   },
@@ -590,7 +641,7 @@ const styles = StyleSheet.create({
     height: 50,
     borderRadius: 16,
     overflow: 'hidden',
-    marginTop: 4,
+    marginTop: 2,
   },
   saveGradient: {
     flex: 1,

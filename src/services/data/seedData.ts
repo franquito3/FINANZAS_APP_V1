@@ -2,15 +2,17 @@ import { db } from '../../db/powersync';
 import { deterministicId, LOCAL_DEMO_USER_ID } from '../../utils/id';
 
 export const DEFAULT_CATEGORIES = [
-  { key: 'shopping', name: 'Shopping', icon_identifier: '🛒', color_hex: '#8B5CF6', type: 'EGRESO' },
   { key: 'food', name: 'Food', icon_identifier: '🍴', color_hex: '#F59E0B', type: 'EGRESO' },
+  { key: 'fun', name: 'Ocio', icon_identifier: '🎬', color_hex: '#6366F1', type: 'EGRESO' },
+  { key: 'health', name: 'Salud', icon_identifier: '💊', color_hex: '#EC4899', type: 'EGRESO' },
+  { key: 'shopping', name: 'Shopping', icon_identifier: '🛒', color_hex: '#8B5CF6', type: 'EGRESO' },
   { key: 'transport', name: 'Transporte', icon_identifier: '🚗', color_hex: '#10B981', type: 'EGRESO' },
   { key: 'housing', name: 'Vivienda', icon_identifier: '🏠', color_hex: '#3B82F6', type: 'EGRESO' },
-  { key: 'health', name: 'Salud', icon_identifier: '💊', color_hex: '#EC4899', type: 'EGRESO' },
-  { key: 'fun', name: 'Ocio', icon_identifier: '🎬', color_hex: '#6366F1', type: 'EGRESO' },
+  { key: 'other_expense', name: 'Otros', icon_identifier: '✨', color_hex: '#64748B', type: 'EGRESO' },
   { key: 'salary', name: 'Sueldo', icon_identifier: '💼', color_hex: '#10B981', type: 'INGRESO' },
   { key: 'freelance', name: 'Freelance', icon_identifier: '🚀', color_hex: '#F97316', type: 'INGRESO' },
   { key: 'invest', name: 'Inversión', icon_identifier: '📈', color_hex: '#06B6D4', type: 'INGRESO' },
+  { key: 'other_income', name: 'Otros', icon_identifier: '✨', color_hex: '#64748B', type: 'INGRESO' },
 ] as const;
 
 export const DEFAULT_WALLETS = [
@@ -54,19 +56,12 @@ export async function seedLocalDefaults(userId: string = LOCAL_DEMO_USER_ID): Pr
     // Ensure any previously seeded USD default wallets use PEN
     await db.execute("UPDATE wallets SET currency_code = 'PEN' WHERE currency_code = 'USD'");
 
-    const existingCats = await db.getOptional<{ id: string }>(
-      'SELECT id FROM categories LIMIT 1'
-    );
     const existingWallets = await db.getOptional<{ id: string }>(
       'SELECT id FROM wallets LIMIT 1'
     );
     const existingBudgets = await db.getOptional<{ id: string }>(
       'SELECT id FROM budgets LIMIT 1'
     );
-
-    if (existingCats && existingWallets && existingBudgets) {
-      return;
-    }
 
     const now = new Date().toISOString();
 
@@ -86,8 +81,13 @@ export async function seedLocalDefaults(userId: string = LOCAL_DEMO_USER_ID): Pr
     const foodCatId = cats.find((c) => c.key === 'food')!.id;
 
     await db.writeTransaction(async (tx) => {
-      if (!existingCats) {
-        for (const c of cats) {
+      // Always ensure all default categories (including 'Otros') exist
+      for (const c of cats) {
+        const existsByName = await tx.getOptional<{ id: string }>(
+          'SELECT id FROM categories WHERE name = ? AND type = ? LIMIT 1',
+          [c.name, c.type]
+        );
+        if (!existsByName) {
           await tx.execute(
             `INSERT OR IGNORE INTO categories (id, user_id, name, icon_identifier, color_hex, type, created_at, updated_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,

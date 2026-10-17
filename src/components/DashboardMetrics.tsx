@@ -24,12 +24,10 @@ export const DashboardMetrics: React.FC<Props> = ({
   const [hideBalance, setHideBalance] = useState(false);
 
   const toggleVisibility = () => {
-    Haptics.selectionAsync();
     setHideBalance((prev) => !prev);
   };
 
   const handleWalletPress = (id: string) => {
-    Haptics.selectionAsync();
     onSelectWallet(id);
   };
 

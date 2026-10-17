@@ -36,14 +36,21 @@ export async function connectPowerSync(): Promise<void> {
 }
 
 /**
- * On sign-out: stop syncing and wipe local data so the next user on this
- * device never sees the previous user's finances.
+ * On sign-out: stop background sync stream while retaining all local SQLite data
+ * in @op-engineering/op-sqlite as requested by the user.
  */
-export async function disconnectAndClearPowerSync(): Promise<void> {
+export async function disconnectPowerSyncKeepData(): Promise<void> {
   try {
     await initLocalDatabase();
-    await db.disconnectAndClear();
+    await db.disconnect();
   } catch (error) {
-    console.error('[PowerSync] Error al desconectar/limpiar:', error);
+    console.error('[PowerSync] Error al desconectar sincronización:', error);
   }
+}
+
+/**
+ * Legacy alias preserved for compatibility — disconnects without deleting SQLite rows.
+ */
+export async function disconnectAndClearPowerSync(): Promise<void> {
+  return disconnectPowerSyncKeepData();
 }

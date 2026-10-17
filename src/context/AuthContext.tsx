@@ -2,7 +2,11 @@ import React, { createContext, useContext, useEffect, useRef, useState } from 'r
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../services/supabase/client';
 import { signInWithGoogleOAuth, signOutUser } from '../services/auth/googleAuth';
-import { connectPowerSync, disconnectAndClearPowerSync, initLocalDatabase } from '../db/powersync';
+import {
+  connectPowerSync,
+  disconnectPowerSyncKeepData,
+  initLocalDatabase,
+} from '../db/powersync';
 import { seedLocalDefaults } from '../services/data/seedData';
 
 interface AuthContextType {
@@ -63,7 +67,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signOut = async () => {
     const result = await signOutUser();
     activeUserId.current = null;
-    await disconnectAndClearPowerSync();
+    // Disconnect remote sync stream but explicitly preserve all local SQLite data
+    await disconnectPowerSyncKeepData();
     return result;
   };
 

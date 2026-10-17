@@ -1,6 +1,5 @@
 import React from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Alert } from 'react-native';
-import * as Haptics from 'expo-haptics';
 import { Transaction } from '../types';
 import { THEME } from '../constants';
 import { formatCurrency } from '../utils';
@@ -12,7 +11,6 @@ interface Props {
 
 export const TransactionList: React.FC<Props> = ({ transactions, onDeleteTransaction }) => {
   const confirmDelete = (tx: Transaction) => {
-    Haptics.selectionAsync();
     Alert.alert(
       'Eliminar Transacción',
       `¿Deseas eliminar "${tx.notes || tx.category_name || 'Transacción'}" por ${formatCurrency(tx.amount)}?`,
@@ -57,7 +55,6 @@ export const TransactionList: React.FC<Props> = ({ transactions, onDeleteTransac
               <TouchableOpacity
                 key={tx.id}
                 style={[styles.itemRow, !isLast && styles.borderBottom]}
-                onPress={() => Haptics.selectionAsync()}
                 onLongPress={() => confirmDelete(tx)}
                 activeOpacity={0.7}
               >
