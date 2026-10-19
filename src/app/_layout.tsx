@@ -6,6 +6,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { PowerSyncContext } from '@powersync/react-native';
 import { AuthProvider } from '../context/AuthContext';
+import { AlertProvider } from '../context/AlertContext';
 import { db } from '../db/powersync';
 import { validateEnv } from '../config/env';
 
@@ -19,11 +20,13 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <PowerSyncContext.Provider value={db}>
           <AuthProvider>
-            <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="(tabs)" />
-              <Stack.Screen name="auth/callback" />
-            </Stack>
-            <StatusBar style="light" />
+            <AlertProvider>
+              <Stack screenOptions={{ headerShown: false }}>
+                <Stack.Screen name="(tabs)" />
+                <Stack.Screen name="auth/callback" />
+              </Stack>
+              <StatusBar style="light" />
+            </AlertProvider>
           </AuthProvider>
         </PowerSyncContext.Provider>
       </SafeAreaProvider>

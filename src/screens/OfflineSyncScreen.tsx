@@ -5,12 +5,12 @@ import {
   View,
   TouchableOpacity,
   ScrollView,
-  Alert,
   Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
+import { useAlert } from '../context/AlertContext';
 import { db, initLocalDatabase } from '../db/powersync';
 import {
   getUnresolvedConflicts,
@@ -29,6 +29,7 @@ import { Transaction } from '../types';
 export const OfflineSyncScreen: React.FC = () => {
   const syncStatus = useSyncStatus();
   const { user } = useAuth();
+  const { showAlert } = useAlert();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [conflicts, setConflicts] = useState<SyncConflict[]>([]);
   const [isInserting, setIsInserting] = useState(false);
@@ -80,7 +81,11 @@ export const OfflineSyncScreen: React.FC = () => {
       });
       Haptics.selectionAsync();
     } catch (err: any) {
-      Alert.alert('Error Local SQLite', err.message);
+      showAlert({
+        title: 'Error Local SQLite',
+        message: err.message,
+        type: 'error',
+      });
     } finally {
       setIsInserting(false);
     }
@@ -95,7 +100,11 @@ export const OfflineSyncScreen: React.FC = () => {
       await resolveConflict(db, conflictId, choice);
       await loadLocalData();
     } catch (err: any) {
-      Alert.alert('Error al resolver conflicto', err.message);
+      showAlert({
+        title: 'Error al resolver conflicto',
+        message: err.message,
+        type: 'error',
+      });
     }
   };
 

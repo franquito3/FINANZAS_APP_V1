@@ -5,24 +5,27 @@ import {
   View,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../context/AuthContext';
+import { useAlert } from '../context/AlertContext';
 import { THEME } from '../constants';
 import { isSupabaseConfigured } from '../config/env';
 
 export const AuthScreen: React.FC = () => {
   const { session, user, isLoading, signInWithGoogle, signOut } = useAuth();
+  const { showAlert } = useAlert();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleGoogleLogin = async () => {
     if (!isSupabaseConfigured()) {
-      Alert.alert(
-        'Configuración Requerida',
-        'Configure EXPO_PUBLIC_SUPABASE_URL y EXPO_PUBLIC_SUPABASE_ANON_KEY en el archivo .env y reinicie el servidor de desarrollo.'
-      );
+      showAlert({
+        title: 'Configuración Requerida',
+        message:
+          'Configure EXPO_PUBLIC_SUPABASE_URL y EXPO_PUBLIC_SUPABASE_ANON_KEY en el archivo .env y reinicie el servidor de desarrollo.',
+        type: 'warning',
+      });
       return;
     }
 
@@ -31,17 +34,40 @@ export const AuthScreen: React.FC = () => {
     setIsSubmitting(false);
 
     if (error) {
-      Alert.alert('Error de Autenticación', error.message);
+      showAlert({
+        title: 'Error de Autenticación',
+        message: error.message,
+        type: 'error',
+      });
     }
   };
 
   const handleSignOut = async () => {
-    setIsSubmitting(true);
-    const { error } = await signOut();
-    setIsSubmitting(false);
-    if (error) {
-      Alert.alert('Error al cerrar sesión', error.message);
-    }
+    showAlert({
+      title: 'Cerrar Sesión',
+      message:
+        '¿Estás seguro de que deseas cerrar sesión? Tus registros locales en SQLite se mantendrán intactos.',
+      type: 'confirm',
+      buttons: [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Cerrar Sesión',
+          style: 'destructive',
+          onPress: async () => {
+            setIsSubmitting(true);
+            const { error } = await signOut();
+            setIsSubmitting(false);
+            if (error) {
+              showAlert({
+                title: 'Error al cerrar sesión',
+                message: error.message,
+                type: 'error',
+              });
+            }
+          },
+        },
+      ],
+    });
   };
 
   if (isLoading) {
@@ -53,7 +79,8 @@ export const AuthScreen: React.FC = () => {
   }
 
   return (
-    <BottomSheetScrollView
+    <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
+      <BottomSheetScrollView
       contentContainerStyle={styles.sheetContent}
       showsVerticalScrollIndicator={false}
     >
@@ -177,7 +204,8 @@ export const AuthScreen: React.FC = () => {
         </View>
       </View>
     </BottomSheetScrollView>
-  );
+  </View>
+);
 };
 
 const styles = StyleSheet.create({

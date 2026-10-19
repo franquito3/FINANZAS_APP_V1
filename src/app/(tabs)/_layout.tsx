@@ -1,9 +1,10 @@
 import React, { useMemo, useRef } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, Image } from 'react-native';
 import { Slot, usePathname, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import BottomSheet from '@gorhom/bottom-sheet';
+import { Ionicons } from '@expo/vector-icons';
 import { Wallet, FileText, ShieldCheck } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { DashboardMetrics } from '../../components/DashboardMetrics';
@@ -12,6 +13,7 @@ import {
   FinanceShellProvider,
   useFinanceShell,
 } from '../../context/FinanceShellContext';
+import { useAuth } from '../../context/AuthContext';
 import { useSyncStatus } from '../../hooks/useSyncStatus';
 
 const ACTIVE_VIOLET = '#7C3AED';
@@ -19,9 +21,13 @@ const INACTIVE_GRAY = '#94A3B8';
 
 function AppShellContent() {
   const pathname = usePathname();
+  const { user } = useAuth();
   const syncStatus = useSyncStatus();
   const bottomSheetRef = useRef<BottomSheet>(null);
   const snapPoints = useMemo(() => ['56%', '100%'], []);
+
+  const userPhoto = (user?.user_metadata?.avatar_url || user?.user_metadata?.picture) as string | undefined;
+  const userInitial = ((user?.user_metadata?.full_name || user?.email || 'U')[0] || 'U').toUpperCase();
 
   const {
     summary,
@@ -33,6 +39,7 @@ function AppShellContent() {
     closeTransactionModal,
     isModalOpen,
     modalInitialType,
+    editingTransaction,
   } = useFinanceShell();
 
   const isFinanzas = pathname === '/' || pathname === '/index';
@@ -41,7 +48,7 @@ function AppShellContent() {
 
   const handleTabPress = (targetPath: '/' | '/reports' | '/auth', isCurrent: boolean) => {
     if (isCurrent) return;
-    // Strategic haptic #1: subtle Light impact when changing tabs
+    // Strategic haptic: subtle Light impact when changing tabs
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     router.replace(targetPath);
   };
@@ -64,19 +71,36 @@ function AppShellContent() {
                 <Text style={styles.brandSubtitle}>Finanzas</Text>
               </View>
 
-              <View style={styles.statusPill}>
-                <View
-                  style={[
-                    styles.dot,
-                    {
-                      backgroundColor: syncStatus.connected ? '#10B981' : '#10B981',
-                    },
-                  ]}
-                />
-                <Text style={styles.statusPillText}>
-                  {syncStatus.connected ? 'CLOUD' : 'SQLITE'}
-                </Text>
-              </View>
+              {user ? (
+                <TouchableOpacity
+                  style={styles.profileBtn}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    router.replace('/auth');
+                  }}
+                  activeOpacity={0.8}
+                >
+                  {userPhoto ? (
+                    <Image source={{ uri: userPhoto }} style={styles.profileAvatar} />
+                  ) : (
+                    <View style={styles.profileInitial}>
+                      <Text style={styles.profileInitialText}>{userInitial}</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={styles.loginPill}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    router.replace('/auth');
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="person-circle-outline" size={17} color="#FFFFFF" />
+                  <Text style={styles.loginPillText}>Iniciar sesión</Text>
+                </TouchableOpacity>
+              )}
             </View>
 
             <DashboardMetrics
@@ -95,14 +119,8 @@ function AppShellContent() {
             snapPoints={snapPoints}
             enablePanDownToClose={false}
             enableDynamicSizing={false}
-            backgroundStyle={
-              isReportes ? styles.sheetBackgroundDark : styles.sheetBackground
-            }
-            handleIndicatorStyle={
-              isReportes
-                ? styles.sheetHandleIndicatorDark
-                : styles.sheetHandleIndicator
-            }
+            backgroundStyle={styles.sheetBackground}
+            handleIndicatorStyle={styles.sheetHandleIndicator}
             style={styles.bottomSheetShadow}
           >
             <View style={styles.sheetContentContainer}>
@@ -184,6 +202,7 @@ function AppShellContent() {
       <TransactionModal
         visible={isModalOpen}
         initialType={modalInitialType}
+        transactionToEdit={editingTransaction}
         onClose={closeTransactionModal}
         onSuccess={refreshData}
         wallets={wallets}
@@ -235,49 +254,55 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
     lineHeight: 25,
   },
-  statusPill: {
+  profileBtn: {
+    borderRadius: 19,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
+    marginTop: 2,
+  },
+  profileAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+  },
+  profileInitial: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#4F46E5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileInitialText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  loginPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+    backgroundColor: 'rgba(255, 255, 255, 0.16)',
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 7,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.16)',
+    borderColor: 'rgba(255, 255, 255, 0.28)',
     marginTop: 2,
   },
-  dot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-  },
-  statusPillText: {
-    fontSize: 11,
-    fontWeight: '800',
+  loginPillText: {
+    fontSize: 11.5,
+    fontWeight: '700',
     color: '#FFFFFF',
-    letterSpacing: 0.6,
   },
   sheetBackground: {
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
   },
-  sheetBackgroundDark: {
-    backgroundColor: '#1E1B4B',
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    borderTopWidth: 1,
-    borderColor: 'rgba(139, 92, 246, 0.35)',
-  },
   sheetHandleIndicator: {
     backgroundColor: '#CBD5E1',
-    width: 42,
-    height: 5,
-    borderRadius: 3,
-  },
-  sheetHandleIndicatorDark: {
-    backgroundColor: 'rgba(255, 255, 255, 0.38)',
     width: 42,
     height: 5,
     borderRadius: 3,

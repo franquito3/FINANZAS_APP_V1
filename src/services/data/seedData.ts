@@ -2,13 +2,19 @@ import { db } from '../../db/powersync';
 import { deterministicId, LOCAL_DEMO_USER_ID } from '../../utils/id';
 
 export const DEFAULT_CATEGORIES = [
-  { key: 'food', name: 'Food', icon_identifier: '🍴', color_hex: '#F59E0B', type: 'EGRESO' },
-  { key: 'fun', name: 'Ocio', icon_identifier: '🎬', color_hex: '#6366F1', type: 'EGRESO' },
-  { key: 'health', name: 'Salud', icon_identifier: '💊', color_hex: '#EC4899', type: 'EGRESO' },
-  { key: 'shopping', name: 'Shopping', icon_identifier: '🛒', color_hex: '#8B5CF6', type: 'EGRESO' },
+  // EGRESOS
+  { key: 'food', name: 'Alimentación', icon_identifier: '🍴', color_hex: '#F59E0B', type: 'EGRESO' },
+  { key: 'housing', name: 'Vivienda y Servicios', icon_identifier: '🏠', color_hex: '#3B82F6', type: 'EGRESO' },
   { key: 'transport', name: 'Transporte', icon_identifier: '🚗', color_hex: '#10B981', type: 'EGRESO' },
-  { key: 'housing', name: 'Vivienda', icon_identifier: '🏠', color_hex: '#3B82F6', type: 'EGRESO' },
+  { key: 'health', name: 'Salud y Farmacia', icon_identifier: '💊', color_hex: '#EC4899', type: 'EGRESO' },
+  { key: 'education', name: 'Educación', icon_identifier: '📚', color_hex: '#6366F1', type: 'EGRESO' },
+  { key: 'fun', name: 'Ocio y Salidas', icon_identifier: '🎬', color_hex: '#8B5CF6', type: 'EGRESO' },
+  { key: 'shopping', name: 'Compras Personales', icon_identifier: '🛍️', color_hex: '#F43F5E', type: 'EGRESO' },
+  { key: 'subscriptions', name: 'Suscripciones', icon_identifier: '📱', color_hex: '#06B6D4', type: 'EGRESO' },
+  { key: 'debts', name: 'Deudas y Préstamos', icon_identifier: '💳', color_hex: '#E11D48', type: 'EGRESO' },
   { key: 'other_expense', name: 'Otros', icon_identifier: '✨', color_hex: '#64748B', type: 'EGRESO' },
+
+  // INGRESOS
   { key: 'salary', name: 'Sueldo', icon_identifier: '💼', color_hex: '#10B981', type: 'INGRESO' },
   { key: 'freelance', name: 'Freelance', icon_identifier: '🚀', color_hex: '#F97316', type: 'INGRESO' },
   { key: 'invest', name: 'Inversión', icon_identifier: '📈', color_hex: '#06B6D4', type: 'INGRESO' },
@@ -16,8 +22,8 @@ export const DEFAULT_CATEGORIES = [
 ] as const;
 
 export const DEFAULT_WALLETS = [
-  { key: 'cash', name: 'Efectivo', currency_code: 'PEN' },
   { key: 'bank', name: 'Cuenta Banco', currency_code: 'PEN' },
+  { key: 'cash', name: 'Efectivo', currency_code: 'PEN' },
 ] as const;
 
 /**
@@ -96,8 +102,12 @@ export async function seedLocalDefaults(userId: string = LOCAL_DEMO_USER_ID): Pr
         }
       }
 
-      if (!existingWallets) {
-        for (const w of wallets) {
+      for (const w of wallets) {
+        const walletExists = await tx.getOptional<{ id: string }>(
+          'SELECT id FROM wallets WHERE name = ? LIMIT 1',
+          [w.name]
+        );
+        if (!walletExists) {
           await tx.execute(
             `INSERT OR IGNORE INTO wallets (id, user_id, name, currency_code, is_active, created_at, updated_at)
              VALUES (?, ?, ?, ?, 1, ?, ?)`,
@@ -119,7 +129,99 @@ export async function seedLocalDefaults(userId: string = LOCAL_DEMO_USER_ID): Pr
         );
       }
     });
+
+    // Clean any duplicates or obsolete aliases in SQLite
+    await cleanDuplicateCategories();
   } catch (error) {
     console.error('[Seed] Error seeding default SQLite data:', error);
+  }
+}
+
+/**
+ * Eliminates duplicate categories in SQLite, reassigning transactions and budgets
+ * to canonical categories and removing duplicates (e.g. Salud -> Salud y Farmacia, Ocio -> Ocio y Salidas).
+ */
+export async function cleanDuplicateCategories(): Promise<void> {
+  const DUPLICATE_MAPPINGS: { canonical: string; aliases: string[] }[] = [
+    { canonical: 'Salud y Farmacia', aliases: ['Salud', 'salud', 'Salud & Farmacia'] },
+    { canonical: 'Ocio y Salidas', aliases: ['Ocio', 'ocio', 'Ocio & Salidas', 'Diversión'] },
+    { canonical: 'Alimentación', aliases: ['Food', 'food', 'Comida', 'Alimentos'] },
+    { canonical: 'Vivienda y Servicios', aliases: ['Vivienda', 'vivienda', 'Hogar', 'Servicios'] },
+    { canonical: 'Compras Personales', aliases: ['Shopping', 'shopping', 'Compras', 'compras'] },
+    { canonical: 'Transporte', aliases: ['Transport', 'transporte'] },
+    { canonical: 'Educación', aliases: ['Education', 'educacion'] },
+  ];
+
+  try {
+    await db.writeTransaction(async (tx) => {
+      for (const map of DUPLICATE_MAPPINGS) {
+        const canonical = await tx.getOptional<{ id: string }>(
+          'SELECT id FROM categories WHERE name = ? LIMIT 1',
+          [map.canonical]
+        );
+        if (!canonical) continue;
+
+        for (const alias of map.aliases) {
+          const aliasRows = await tx.getAll<{ id: string }>(
+            'SELECT id FROM categories WHERE name = ? AND id != ?',
+            [alias, canonical.id]
+          );
+          for (const row of aliasRows) {
+            await tx.execute(
+              'UPDATE transactions SET category_id = ? WHERE category_id = ?',
+              [canonical.id, row.id]
+            );
+            await tx.execute(
+              'UPDATE budgets SET category_id = ? WHERE category_id = ?',
+              [canonical.id, row.id]
+            );
+            await tx.execute('DELETE FROM categories WHERE id = ?', [row.id]);
+          }
+        }
+      }
+
+      // Clean same-name duplicate categories (keeping the first created)
+      const allCats = await tx.getAll<{ id: string; name: string; type: string; created_at: string }>(
+        'SELECT id, name, type, created_at FROM categories ORDER BY created_at ASC'
+      );
+      const seen = new Set<string>();
+      for (const cat of allCats) {
+        const key = `${cat.type}:${cat.name.trim().toLowerCase()}`;
+        if (seen.has(key)) {
+          const canonical = allCats.find(
+            (c) => `${c.type}:${c.name.trim().toLowerCase()}` === key && c.id !== cat.id
+          );
+          if (canonical) {
+            await tx.execute(
+              'UPDATE transactions SET category_id = ? WHERE category_id = ?',
+              [canonical.id, cat.id]
+            );
+            await tx.execute(
+              'UPDATE budgets SET category_id = ? WHERE category_id = ?',
+              [canonical.id, cat.id]
+            );
+            await tx.execute('DELETE FROM categories WHERE id = ?', [cat.id]);
+          }
+        } else {
+          seen.add(key);
+        }
+      }
+
+      // Remove "Ahorro e Inversión" as an expense if it has 0 transactions
+      const ahorroRows = await tx.getAll<{ id: string }>(
+        "SELECT id FROM categories WHERE (name LIKE '%Ahorro%' OR name LIKE '%Inversión%') AND type = 'EGRESO'"
+      );
+      for (const row of ahorroRows) {
+        const txCount = await tx.getOptional<{ count: number }>(
+          'SELECT COUNT(*) as count FROM transactions WHERE category_id = ?',
+          [row.id]
+        );
+        if (Number(txCount?.count || 0) === 0) {
+          await tx.execute('DELETE FROM categories WHERE id = ?', [row.id]);
+        }
+      }
+    });
+  } catch (err) {
+    console.error('[cleanDuplicateCategories] Error cleaning duplicates:', err);
   }
 }

@@ -28,6 +28,8 @@ export const DashboardMetrics: React.FC<Props> = ({
   };
 
   const handleWalletPress = (id: string) => {
+    if (selectedWalletId === id) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     onSelectWallet(id);
   };
 
@@ -98,31 +100,25 @@ export const DashboardMetrics: React.FC<Props> = ({
             {/* Dual Action Buttons Inside Glass Card */}
             <View style={styles.actionsRow}>
               <TouchableOpacity
-                style={styles.glassBtn}
+                style={[styles.glassBtn, styles.glassBtnIncome]}
                 onPress={() => handleActionPress('INGRESO')}
                 activeOpacity={0.75}
               >
-                <LinearGradient
-                  colors={['rgba(255, 255, 255, 0.20)', 'rgba(255, 255, 255, 0.07)']}
-                  style={styles.glassBtnInner}
-                >
-                  <Text style={styles.glassBtnSymbol}>＋</Text>
-                  <Text style={styles.glassBtnText}>Ingreso</Text>
-                </LinearGradient>
+                <View style={styles.glassBtnInner}>
+                  <Text style={[styles.glassBtnSymbol, styles.incomeSymbol]}>＋</Text>
+                  <Text style={[styles.glassBtnText, styles.incomeText]}>Ingreso</Text>
+                </View>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={styles.glassBtn}
+                style={[styles.glassBtn, styles.glassBtnExpense]}
                 onPress={() => handleActionPress('EGRESO')}
                 activeOpacity={0.75}
               >
-                <LinearGradient
-                  colors={['rgba(255, 255, 255, 0.20)', 'rgba(255, 255, 255, 0.07)']}
-                  style={styles.glassBtnInner}
-                >
-                  <Text style={styles.glassBtnSymbol}>－</Text>
-                  <Text style={styles.glassBtnText}>Gasto</Text>
-                </LinearGradient>
+                <View style={styles.glassBtnInner}>
+                  <Text style={[styles.glassBtnSymbol, styles.expenseSymbol]}>－</Text>
+                  <Text style={[styles.glassBtnText, styles.expenseText]}>Gasto</Text>
+                </View>
               </TouchableOpacity>
             </View>
           </BlurView>
@@ -258,9 +254,16 @@ const styles = StyleSheet.create({
   glassBtn: {
     flex: 1,
     borderRadius: 999,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.32)',
+    borderWidth: 1.2,
     overflow: 'hidden',
+  },
+  glassBtnIncome: {
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    borderColor: 'rgba(16, 185, 129, 0.45)',
+  },
+  glassBtnExpense: {
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    borderColor: 'rgba(239, 68, 68, 0.45)',
   },
   glassBtnInner: {
     flexDirection: 'row',
@@ -271,15 +274,25 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   glassBtnSymbol: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: 16,
+    fontWeight: '800',
   },
   glassBtnText: {
-    color: '#FFFFFF',
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
     letterSpacing: 0.2,
+  },
+  incomeSymbol: {
+    color: '#34D399',
+  },
+  incomeText: {
+    color: '#E6FFFA',
+  },
+  expenseSymbol: {
+    color: '#F87171',
+  },
+  expenseText: {
+    color: '#FFF1F2',
   },
   semaphoreCard: {
     backgroundColor: '#FFFFFF',

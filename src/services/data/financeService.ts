@@ -120,6 +120,71 @@ export const financeService = {
   },
 
   /**
+   * Performs an atomic internal transfer between two wallets:
+   * Debits from `fromWalletId` (EGRESO) and credits to `toWalletId` (INGRESO).
+   */
+  async createTransfer(params: {
+    fromWalletId: string;
+    toWalletId: string;
+    amount: number;
+    notes?: string;
+    userId: string;
+    date?: string;
+  }): Promise<{ debitId: string; creditId: string }> {
+    const debitId = newId();
+    const creditId = newId();
+    const now = new Date().toISOString();
+    const txDate = params.date || now;
+
+    // Retrieve wallet names for clear transaction descriptions
+    const fromWallet = await db.getOptional<{ name: string }>(
+      'SELECT name FROM wallets WHERE id = ?',
+      [params.fromWalletId]
+    );
+    const toWallet = await db.getOptional<{ name: string }>(
+      'SELECT name FROM wallets WHERE id = ?',
+      [params.toWalletId]
+    );
+
+    const fromName = fromWallet?.name || 'Billetera Origen';
+    const toName = toWallet?.name || 'Billetera Destino';
+
+    // Get or find category IDs for egreso / ingreso (or 'Otros')
+    const debitCat = await db.getOptional<{ id: string }>(
+      "SELECT id FROM categories WHERE type = 'EGRESO' AND name = 'Otros' LIMIT 1"
+    );
+    const creditCat = await db.getOptional<{ id: string }>(
+      "SELECT id FROM categories WHERE type = 'INGRESO' AND name = 'Otros' LIMIT 1"
+    );
+
+    // Fallbacks if not found
+    const fallbackDebitCat = debitCat?.id || (await db.getOptional<{ id: string }>("SELECT id FROM categories WHERE type = 'EGRESO' LIMIT 1"))?.id || '';
+    const fallbackCreditCat = creditCat?.id || (await db.getOptional<{ id: string }>("SELECT id FROM categories WHERE type = 'INGRESO' LIMIT 1"))?.id || '';
+
+    const customNote = params.notes?.trim() ? ` • ${params.notes.trim()}` : '';
+    const debitNote = `Transferencia a ${toName}${customNote}`;
+    const creditNote = `Transferencia desde ${fromName}${customNote}`;
+
+    await db.writeTransaction(async (tx) => {
+      // 1. Debit from source wallet
+      await tx.execute(
+        `INSERT INTO transactions (id, user_id, wallet_id, category_id, amount, transaction_date, notes, version, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+        [debitId, params.userId, params.fromWalletId, fallbackDebitCat, params.amount, txDate, debitNote, now, now]
+      );
+
+      // 2. Credit to destination wallet
+      await tx.execute(
+        `INSERT INTO transactions (id, user_id, wallet_id, category_id, amount, transaction_date, notes, version, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+        [creditId, params.userId, params.toWalletId, fallbackCreditCat, params.amount, txDate, creditNote, now, now]
+      );
+    });
+
+    return { debitId, creditId };
+  },
+
+  /**
    * Updates a transaction. Increments `version` so the connector can detect
    * concurrent edits made from another device (optimistic concurrency control).
    */
@@ -156,6 +221,44 @@ export const financeService = {
     return db.getAll<Category>(
       'SELECT id, user_id, name, icon_identifier, color_hex, type FROM categories ORDER BY name ASC'
     );
+  },
+
+  async createCategory(params: {
+    name: string;
+    icon_identifier?: string;
+    color_hex?: string;
+    type: TransactionType;
+    userId: string;
+  }): Promise<string> {
+    const id = newId();
+    const now = new Date().toISOString();
+    await db.execute(
+      `INSERT INTO categories (id, user_id, name, icon_identifier, color_hex, type, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        params.userId,
+        params.name.trim(),
+        params.icon_identifier || 'apps-outline',
+        params.color_hex || '#6366F1',
+        params.type,
+        now,
+        now,
+      ]
+    );
+    return id;
+  },
+
+  async deleteCategory(id: string): Promise<void> {
+    await db.execute('DELETE FROM categories WHERE id = ?', [id]);
+  },
+
+  async getCategoryTransactionsCount(categoryId: string): Promise<number> {
+    const row = await db.getOptional<{ count: number }>(
+      'SELECT COUNT(*) as count FROM transactions WHERE category_id = ?',
+      [categoryId]
+    );
+    return Number(row?.count || 0);
   },
 
   async getWallets(): Promise<Wallet[]> {
